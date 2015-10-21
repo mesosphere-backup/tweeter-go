@@ -1,0 +1,34 @@
+{
+	"ImportPath": "github.com/karlkfi/oinker-go",
+	"GoVersion": "go1.5.1",
+	"Deps": [
+		{
+			"ImportPath": "github.com/dustin/go-humanize",
+			"Rev": "c20a8bde38c8f5ba06f6600edf473705c96829d1"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/clock",
+			"Rev": "600d898af40aa09a7a93ecb9265d87b0504b6f03"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/grace/gracehttp",
+			"Rev": "053ab5d25436faedf3fe76fbf3da797c8c27c659"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/grace/gracenet",
+			"Rev": "053ab5d25436faedf3fe76fbf3da797c8c27c659"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/httpdown",
+			"Rev": "1fa03998d20119dfe4ef73f56a638d83048052e2"
+		},
+		{
+			"ImportPath": "github.com/facebookgo/stats",
+			"Rev": "1b76add642e42c6ffba7211ad7b3939ce654526e"
+		},
+		{
+			"ImportPath": "github.com/karlkfi/inject",
+			"Rev": "dbcebf18384a357337da5c99edbd1675347b5bd3"
+		}
+	]
+}
