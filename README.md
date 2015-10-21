@@ -5,32 +5,64 @@ Example Go (golang) web app with dependency injection and graceful shutdown. Act
 
 ## Dependencies
 
+Building requires [Go](https://golang.org/doc/install), [Godep](https://github.com/tools/godep), [Docker](https://docs.docker.com/installation/), &amp; Make.
+
+Code dependencies are vendored with Godep:
+
 - [Facebook's Grace library](http://github.com/facebookgo/grace) - graceful shutdown
 - [Inject](http://github.com/karlkfi/inject) - dependency injection
 - [Humanize](http://github.com/dustin/go-humanize) - readable units
 
+
+## Compilation
+
+Build a local binary:
+
 ```
-go get github.com/facebookgo/grace
-go get github.com/karlkfi/inject
-go get github.com/dustin/go-humanize
+make
 ```
+
+Build a docker image:
+
+```
+make image
+```
+
+
+## Operation
+
+From local code:
+
+```
+go run main.go
+```
+
+(ctrl-c to quit)
+
+In docker:
+
+```
+docker run --rm -it -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest
+```
+
+(ctrl-c to quit)
 
 
 ## Usage
 
-1. Launch the server:
+Visit the home page at http://localhost:8080/
 
-    ```
-    go run main.go
-    ```
+Enter handle &amp; message &amp; hit Oink.
 
-    (ctrl-c to quit)
+See past oinks on the right-hand side of the home page.
 
-1. Home Page:
 
-    ```
-    $ curl http://localhost:8080/
-    ```
+## Future
+
+- Analytics page
+- Cassandra backend (using mesos-dns discovery)
+- Marathon deployment config
+- Kubernetes deployment config
 
 
 ## License

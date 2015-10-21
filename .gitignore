@@ -1,5 +1,8 @@
 # Mac Finder
 .DS_Store
 
-#IntelliJ
+# IntelliJ
 .idea
+
+# compiled binaries
+/_output
