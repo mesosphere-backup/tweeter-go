@@ -5,13 +5,14 @@ Example Go (golang) web app with dependency injection and graceful shutdown. Act
 
 ## Dependencies
 
-[Facebook's Grace library](http://github.com/facebookgo/grace) is used for graceful shutdown.
-
-[Inject](http://github.com/karlkfi/inject) is used for dependency injection.
+- [Facebook's Grace library](http://github.com/facebookgo/grace) - graceful shutdown
+- [Inject](http://github.com/karlkfi/inject) - dependency injection
+- [Humanize](http://github.com/dustin/go-humanize) - readable units
 
 ```
 go get github.com/facebookgo/grace
 go get github.com/karlkfi/inject
+go get github.com/dustin/go-humanize
 ```
 
 

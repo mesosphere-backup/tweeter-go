@@ -4,6 +4,8 @@ import (
 	"github.com/karlkfi/oinker-go/model"
 	"github.com/karlkfi/oinker-go/view"
 
+	"github.com/dustin/go-humanize"
+
 	"net/http"
 	"html/template"
 	"time"
@@ -34,17 +36,19 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 		"layout.html.tmpl",
 	).Funcs(template.FuncMap{
 		"timeSince": c.TimeSince,
-		"sanitizeHTML": c.SanitizeHTML,
 		"avatarURL": c.AvatarURL,
 	}).ParseFiles(
-		"view/layout.html.tmpl",
-		"view/index.html.tmpl",
+		"templates/layout.html.tmpl",
+		"templates/index.html.tmpl",
 	))
 
 	oinks := c.repo.List()
 	log.Printf("Oinks: %+v\n", oinks)
 
 	err := t.Execute(w, view.Index{
+		Page: view.Page{
+			RelativeRootPath: ".",
+		},
 		Oinks: oinks,
 		IsEmpty: len(oinks) == 0,
 	})
@@ -54,11 +58,7 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *IndexController) TimeSince(input time.Time) string {
-	return time.Now().Sub(input).String()
-}
-
-func (c *IndexController) SanitizeHTML(input string) string {
-	return input
+	return humanize.RelTime(input, time.Now(), "ago", "from now")
 }
 
 func (c *IndexController) AvatarURL(handle string) string {

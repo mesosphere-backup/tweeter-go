@@ -4,7 +4,7 @@
     <div class="col-md-3">
       <div class="panel panel-default">
         <div class="panel-body">
-          <form action="/oink" method="post">
+          <form action="{{.RelativeRootPath}}/oink" method="post">
             <div class="form-group">
               <label for="handle">Handle</label>
               <input type="text" name="handle" autofocus="true" class="form-control" maxlength="15" pattern="^[\S]*$" title="Handles cannot contain spaces" required="true" />
@@ -43,7 +43,7 @@
                     </small>
                   </h5>
                   <p class="oink-content">
-                    {{.Content|sanitizeHTML}}
+                    {{.Content}}
                   </p>
                 </div>
               </div>

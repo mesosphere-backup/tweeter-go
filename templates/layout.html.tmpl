@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <title>Oinker</title>
+    <link rel="icon" type="image/png" href="{{.RelativeRootPath}}/assets/images/oinker.png" />
+    <link rel="stylesheet" type="text/css" href="{{.RelativeRootPath}}/assets/stylesheets/bootstrap.css" />
+    <link rel="stylesheet" type="text/css" href="{{.RelativeRootPath}}/assets/stylesheets/oinker.css" />
+  </head>
+  <body>
+    <nav class="navbar navbar-default" role="navigation">
+      <div class="container">
+        <a class="navbar-brand" href="{{.RelativeRootPath}}/">
+          <img height="22" width="22" src="{{.RelativeRootPath}}/assets/images/oinker.png" alt="" style="vertical-align: top;">
+          Oinker
+        </a>
+        <ul class="nav navbar-nav">
+          <li><a href="{{.RelativeRootPath}}/analytics" style="margin-top: 5px; margin-bottom: 5px; padding-top: 10px; padding-bottom: 6px;">Analytics</a></li>
+        </ul>
+      </div>
+    </nav>
+    {{template "body" .}}
+  </body>
+</html>

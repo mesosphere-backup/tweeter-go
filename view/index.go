@@ -5,6 +5,7 @@ import (
 )
 
 type Index struct {
+	Page
 	Oinks []model.Oink
 	IsEmpty bool
 }
