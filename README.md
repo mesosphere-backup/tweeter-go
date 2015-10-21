@@ -31,7 +31,7 @@ make image
 
 ## Operation
 
-From local code:
+Run from local code:
 
 ```
 go run main.go
@@ -39,13 +39,17 @@ go run main.go
 
 (ctrl-c to quit)
 
-In docker:
+Run in Docker:
 
 ```
-docker run --rm -it -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest
+docker run --rm -d -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest
 ```
 
-(ctrl-c to quit)
+Run in [Marathon](https://mesosphere.github.io/marathon/):
+
+```
+curl -H 'Content-Type: application/json' -X POST -d @"marathon.json" ${MARATHON_URL}/v2/apps
+```
 
 
 ## Usage
@@ -59,10 +63,9 @@ See past oinks on the right-hand side of the home page.
 
 ## Future
 
-- Analytics page
-- Cassandra backend (using mesos-dns discovery)
-- Marathon deployment config
 - Kubernetes deployment config
+- Cassandra backend (using mesos-dns discovery)
+- Analytics page
 
 
 ## License
