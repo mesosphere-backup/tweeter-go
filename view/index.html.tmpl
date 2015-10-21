@@ -1,0 +1,57 @@
+{{define "body"}}
+<div class="container">
+  <div class="row">
+    <div class="col-md-3">
+      <div class="panel panel-default">
+        <div class="panel-body">
+          <form action="/oink" method="post">
+            <div class="form-group">
+              <label for="handle">Handle</label>
+              <input type="text" name="handle" autofocus="true" class="form-control" maxlength="15" pattern="^[\S]*$" title="Handles cannot contain spaces" required="true" />
+            </div>
+            <div class="form-group">
+              <label for="content">Compose new Oink</label>
+              <input type="text" name="content" class="form-control" maxlength="140" required="true" style="resize: vertical;" />
+            </div>
+            <div class="form-group clearfix">
+              <input type="submit" value="Oink" class="btn btn-primary btn-sm pull-right">
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="list-group">
+        {{if .IsEmpty}}
+          <h3 class="text-muted text-center">
+            What are you waiting for?<br>Start oinking.
+          </h3>
+        {{else}}
+          {{range .Oinks}}
+            <div class="list-group-item">
+              <div class="media">
+                <div class="pull-left">
+                  <img class="img-rounded media-object" src="{{.Handle|avatarURL}}" width="48" height="48" alt="{{.Handle}}">
+                </div>
+                <div class="media-body">
+                  <h5 class="media-heading">
+                    @{{.Handle}} &middot;
+                    <small>
+                      <time datetime="{{.CreationTime}}">
+                        {{.CreationTime|timeSince}}
+                      </time>
+                    </small>
+                  </h5>
+                  <p class="oink-content">
+                    {{.Content|sanitizeHTML}}
+                  </p>
+                </div>
+              </div>
+            </div>
+          {{end}}
+        {{end}}
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}
