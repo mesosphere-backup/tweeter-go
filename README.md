@@ -48,7 +48,7 @@ go run main.go
 Run in Docker:
 
 ```
-docker run -d -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest
+docker run -d --name oinker -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest
 ```
 
 With Cassandra:
@@ -56,6 +56,12 @@ With Cassandra:
 ```
 docker run -d --name cassandra cassandra:2.2.3
 docker run -d --name oinker --link cassandra:cassandra -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest --cassandra-addr=cassandra
+```
+
+Find Oinker IP:
+
+```
+docker inspect --format "{{.NetworkSettings.IPAddress}}" oinker
 ```
 
 ### Marathon
