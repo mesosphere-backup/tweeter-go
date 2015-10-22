@@ -27,8 +27,25 @@
 			"Rev": "1b76add642e42c6ffba7211ad7b3939ce654526e"
 		},
 		{
+			"ImportPath": "github.com/gocql/gocql",
+			"Comment": "1st_gen_framing-323-g8041a37",
+			"Rev": "8041a37b40f2ca115d6c2902b279250eb627d7af"
+		},
+		{
+			"ImportPath": "github.com/golang/snappy",
+			"Rev": "723cc1e459b8eea2dea4583200fd60757d40097a"
+		},
+		{
 			"ImportPath": "github.com/karlkfi/inject",
 			"Rev": "dbcebf18384a357337da5c99edbd1675347b5bd3"
+		},
+		{
+			"ImportPath": "github.com/satori/go.uuid",
+			"Rev": "08f0718b61e95ddba0ade3346725fe0e4bf28ca6"
+		},
+		{
+			"ImportPath": "gopkg.in/inf.v0",
+			"Rev": "3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4"
 		}
 	]
 }
