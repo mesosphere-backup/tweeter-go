@@ -14,10 +14,10 @@ import (
 )
 
 type IndexController struct {
-	repo *model.OinkRepo
+	repo model.OinkRepo
 }
 
-func NewIndexController(repo *model.OinkRepo) *IndexController {
+func NewIndexController(repo model.OinkRepo) *IndexController {
 	return &IndexController{
 		repo: repo,
 	}
@@ -42,10 +42,14 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 		"templates/index.html.tmpl",
 	))
 
-	oinks := c.repo.List()
+	oinks, err := c.repo.All()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	log.Printf("Oinks: %+v\n", oinks)
 
-	err := t.Execute(w, view.Index{
+	err = t.Execute(w, view.Index{
 		Page: view.Page{
 			RelativeRootPath: ".",
 		},
@@ -54,6 +58,7 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 

@@ -11,10 +11,10 @@ import (
 )
 
 type OinkController struct {
-	repo *model.OinkRepo
+	repo model.OinkRepo
 }
 
-func NewOinkController(repo *model.OinkRepo) *OinkController {
+func NewOinkController(repo model.OinkRepo) *OinkController {
 	return &OinkController{
 		repo: repo,
 	}
@@ -50,7 +50,13 @@ func (c *OinkController) Handle(w http.ResponseWriter, r *http.Request) {
 func (c *OinkController) Get(w http.ResponseWriter, r *http.Request) {
 	subPath := strings.Replace(r.URL.Path, "/oink/", "", 1)
 	if subPath == "" {
-		bytes, err := json.Marshal(c.repo.List())
+		oinks, err := c.repo.All()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		bytes, err := json.Marshal(oinks)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -70,7 +76,11 @@ func (c *OinkController) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := segments[0]
-	oink, found := c.repo.FindByID(id)
+	oink, found, err := c.repo.FindByID(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if !found {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -92,10 +102,14 @@ func (c *OinkController) Post(w http.ResponseWriter, r *http.Request) {
 	handle := r.Form.Get("handle")
 	content := r.Form.Get("content")
 
-	oink := c.repo.Add(model.Oink{
+	oink, err := c.repo.Create(model.Oink{
 		Handle: handle,
 		Content: content,
 	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return //TODO: redirect to index with error popup?
+	}
 	log.Printf("Added Oink: %+v\n", oink)
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)

@@ -31,7 +31,11 @@ make image
 
 ## Operation
 
-Run from local code:
+There are several ways to launch the Oinker server.
+
+### Source
+
+Run from local source code:
 
 ```
 go run main.go
@@ -39,17 +43,30 @@ go run main.go
 
 (ctrl-c to quit)
 
+### Docker
+
 Run in Docker:
 
 ```
-docker run --rm -d -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest
+docker run -d -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest
 ```
+
+With Cassandra:
+
+```
+docker run -d --name cassandra cassandra:2.2.3
+docker run -d --name oinker --link cassandra:cassandra -p 0.0.0.0:8080:8080 karlkfi/oinker-go:latest --cassandra-addr=cassandra
+```
+
+### Marathon
 
 Run in [Marathon](https://mesosphere.github.io/marathon/):
 
 ```
 curl -H 'Content-Type: application/json' -X POST -d @"marathon.json" ${MARATHON_URL}/v2/apps
 ```
+
+### Kubernetes
 
 Run in [Kubernetes](http://kubernetes.io/):
 
@@ -69,7 +86,7 @@ See past oinks on the right-hand side of the home page.
 
 ## Future
 
-- Cassandra backend (using mesos-dns discovery)
+- DNS SRV record Cassandra discovery
 - Analytics page
 
 
