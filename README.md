@@ -51,6 +51,12 @@ Run in [Marathon](https://mesosphere.github.io/marathon/):
 curl -H 'Content-Type: application/json' -X POST -d @"marathon.json" ${MARATHON_URL}/v2/apps
 ```
 
+Run in [Kubernetes](http://kubernetes.io/):
+
+```
+kubectl create -f kubernetes.yaml
+```
+
 
 ## Usage
 
@@ -63,7 +69,6 @@ See past oinks on the right-hand side of the home page.
 
 ## Future
 
-- Kubernetes deployment config
 - Cassandra backend (using mesos-dns discovery)
 - Analytics page
 
