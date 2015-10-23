@@ -4,8 +4,8 @@ import (
 	"github.com/karlkfi/oinker-go/controller"
 	"github.com/karlkfi/oinker-go/model"
 
-	"github.com/karlkfi/inject"
 	"github.com/gocql/gocql"
+	"github.com/karlkfi/inject"
 
 	"net/http"
 )
@@ -41,6 +41,9 @@ func (o *Oinker) NewGraph() inject.Graph {
 
 	var oinkController *controller.OinkController
 	graph.Define(&oinkController, inject.NewProvider(controller.NewOinkController, &oinkRepo))
+
+	var analyticsController *controller.AnalyticsController
+	graph.Define(&analyticsController, inject.NewProvider(controller.NewAnalyticsController, &oinkRepo))
 
 	return graph
 }

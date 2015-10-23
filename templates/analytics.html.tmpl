@@ -1,0 +1,22 @@
+{{define "body"}}
+<div class="container">
+  <div class="row">
+    <div class="col-md-6 col-md-offset-3">
+      <div class="list-group">
+        {{if .Analytics}} 
+          {{range .Analytics}}
+            <div class="list-group-item">
+              <span class="badge">{{.Freq}}</span>
+              <h4>{{.Key}}</h4>
+            </div>
+          {{end}}
+        {{else}} 
+          <h3 class="text-muted text-center">
+            You haven't done any analyzing, or you have no oinks to analyze!
+          </h3>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

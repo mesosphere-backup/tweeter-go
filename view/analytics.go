@@ -4,8 +4,7 @@ import (
 	"github.com/karlkfi/oinker-go/model"
 )
 
-type Index struct {
+type Analytics struct {
 	Page
-	Oinks   []model.Oink
-	IsEmpty bool
+	Analytics []model.Analytics
 }

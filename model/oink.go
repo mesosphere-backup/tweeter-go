@@ -5,8 +5,8 @@ import (
 )
 
 type Oink struct {
-	ID string
-	Content string
+	ID           string
+	Content      string
 	CreationTime time.Time
-	Handle string
+	Handle       string
 }

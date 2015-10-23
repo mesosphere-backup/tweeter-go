@@ -3,11 +3,11 @@ package controller
 import (
 	"github.com/karlkfi/oinker-go/model"
 
-	"net/http"
-	"fmt"
 	"encoding/json"
-	"strings"
+	"fmt"
 	"log"
+	"net/http"
+	"strings"
 )
 
 type OinkController struct {
@@ -103,7 +103,7 @@ func (c *OinkController) Post(w http.ResponseWriter, r *http.Request) {
 	content := r.Form.Get("content")
 
 	oink, err := c.repo.Create(model.Oink{
-		Handle: handle,
+		Handle:  handle,
 		Content: content,
 	})
 	if err != nil {
