@@ -5,4 +5,5 @@ type OinkRepo interface {
 	Create(Oink) (Oink, error)
 	FindByID(id string) (Oink, bool, error)
 	All() ([]Oink, error)
+	Analytics() ([]Analytics, error)
 }

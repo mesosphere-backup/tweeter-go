@@ -6,11 +6,11 @@ import (
 
 	"github.com/dustin/go-humanize"
 
-	"net/http"
-	"html/template"
-	"time"
-	"log"
 	"fmt"
+	"html/template"
+	"log"
+	"net/http"
+	"time"
 )
 
 type IndexController struct {
@@ -53,7 +53,7 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 		Page: view.Page{
 			RelativeRootPath: ".",
 		},
-		Oinks: oinks,
+		Oinks:   oinks,
 		IsEmpty: len(oinks) == 0,
 	})
 	if err != nil {

@@ -5,9 +5,9 @@ import (
 
 	"github.com/satori/go.uuid"
 
-	"time"
 	"fmt"
 	"log"
+	"time"
 )
 
 type CQLOinkRepo struct {
@@ -50,8 +50,8 @@ func (r *CQLOinkRepo) Init() error {
 
 	err = session.Query(
 		"CREATE TABLE IF NOT EXISTS oinker.oinks " +
-		"( kind VARCHAR, id VARCHAR, content VARCHAR, created_at timeuuid, handle VARCHAR, PRIMARY KEY (kind, created_at) ) " +
-		"WITH CLUSTERING ORDER BY (created_at DESC)",
+			"( kind VARCHAR, id VARCHAR, content VARCHAR, created_at timeuuid, handle VARCHAR, PRIMARY KEY (kind, created_at) ) " +
+			"WITH CLUSTERING ORDER BY (created_at DESC)",
 	).Exec()
 	if err != nil {
 		return fmt.Errorf("Creating table (oinker.oinks): %s", err)
@@ -61,8 +61,8 @@ func (r *CQLOinkRepo) Init() error {
 
 	err = session.Query(
 		"CREATE TABLE IF NOT EXISTS oinker.analytics " +
-		"( kind VARCHAR, key VARCHAR, frequency INT, PRIMARY KEY (kind, frequency) ) " +
-		"WITH CLUSTERING ORDER BY (frequency DESC)",
+			"( kind VARCHAR, key VARCHAR, frequency INT, PRIMARY KEY (kind, frequency) ) " +
+			"WITH CLUSTERING ORDER BY (frequency DESC)",
 	).Exec()
 	if err != nil {
 		return fmt.Errorf("Creating table (oinker.analytics): %s", err)
@@ -82,8 +82,8 @@ func (r *CQLOinkRepo) Create(o Oink) (Oink, error) {
 	defer session.Close()
 
 	err = session.Query(
-		"INSERT INTO oinks (kind, id, content, created_at, handle) " +
-		"VALUES (?, ?, ?, ?, ?)",
+		"INSERT INTO oinks (kind, id, content, created_at, handle) "+
+			"VALUES (?, ?, ?, ?, ?)",
 		"oink", o.ID, o.Content, gocql.UUIDFromTime(o.CreationTime), o.Handle,
 	).Exec()
 	if err != nil {
@@ -102,9 +102,9 @@ func (r *CQLOinkRepo) FindByID(id string) (Oink, bool, error) {
 
 	iter := session.Query("SELECT content, created_at, handle FROM oinks WHERE id = ?", id).Iter()
 	var (
-		content string
+		content      string
 		creationTime gocql.UUID
-		handle string
+		handle       string
 	)
 	oink := Oink{
 		ID: id,
@@ -130,21 +130,21 @@ func (r *CQLOinkRepo) All() ([]Oink, error) {
 	defer session.Close()
 
 	iter := session.Query(
-		"SELECT id, content, created_at, handle FROM oinks " +
-		"WHERE kind = ? ORDER BY created_at DESC",
+		"SELECT id, content, created_at, handle FROM oinks "+
+			"WHERE kind = ? ORDER BY created_at DESC",
 		"oink",
 	).Iter()
 	var (
 		id, content, handle string
-		creationTime gocql.UUID
+		creationTime        gocql.UUID
 	)
 	oinks := make([]Oink, 0)
 	for iter.Scan(&id, &content, &creationTime, &handle) {
 		oink := Oink{
-			ID: id,
-			Content: content,
+			ID:           id,
+			Content:      content,
 			CreationTime: creationTime.Time(),
-			Handle: handle,
+			Handle:       handle,
 		}
 		oinks = append(oinks, oink)
 	}
@@ -153,4 +153,35 @@ func (r *CQLOinkRepo) All() ([]Oink, error) {
 	}
 
 	return oinks, nil
+}
+
+func (r *CQLOinkRepo) Analytics() ([]Analytics, error) {
+	session, err := r.cluster.CreateSession()
+	if err != nil {
+		return nil, fmt.Errorf("Creating CQL Session: %s", err)
+	}
+	defer session.Close()
+
+	iter := session.Query(
+		"SELECT key, frequency FROM analytics "+
+			"WHERE kind = ? ORDER BY frequency DESC",
+		"oink",
+	).Iter()
+	var (
+		key  string
+		freq int
+	)
+	result := make([]Analytics, 0)
+	for iter.Scan(&key, &freq) {
+		anal := Analytics{
+			Key:  key,
+			Freq: freq,
+		}
+		result = append(result, anal)
+	}
+	if err := iter.Close(); err != nil {
+		return nil, fmt.Errorf("Selecting analtics: %s", err)
+	}
+
+	return result, nil
 }

@@ -1,15 +1,16 @@
 package model
 
 import (
-	"sync"
 	"strconv"
+	"sync"
 	"time"
 )
 
 // MockOinkRepo is an in-memory OinkRepo
 type MockOinkRepo struct {
-	oinks []Oink
-	lock sync.RWMutex
+	oinks     []Oink
+	analytics []Analytics
+	lock      sync.RWMutex
 }
 
 func NewMockOinkRepo() *MockOinkRepo {
@@ -48,8 +49,17 @@ func (r *MockOinkRepo) All() ([]Oink, error) {
 	defer r.lock.RUnlock()
 
 	result := make([]Oink, 0, len(r.oinks))
-	for i := len(r.oinks)-1; i >= 0; i-- {
+	for i := len(r.oinks) - 1; i >= 0; i-- {
 		result = append(result, r.oinks[i])
 	}
+	return result, nil
+}
+
+func (r *MockOinkRepo) Analytics() ([]Analytics, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	//TODO(jdef) key = user:<username>, freq = <total-oinks>
+	result := make([]Analytics, len(r.analytics))
+	copy(result, r.analytics)
 	return result, nil
 }
