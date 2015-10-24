@@ -3,35 +3,17 @@ package main
 import (
 	"github.com/karlkfi/oinker-go/controller"
 	"github.com/karlkfi/oinker-go/model"
+	"github.com/karlkfi/oinker-go/service"
 
 	"github.com/karlkfi/inject"
 	"github.com/gocql/gocql"
 
 	"net/http"
-	"github.com/karlkfi/oinker-go/service"
 )
-
-const defaultReplicationFactor = 3
 
 type Oinker struct {
 	CQLHosts []string
-	cqlReplicationFactor int
-}
-
-func (o *Oinker) SetCQLReplicationFactor(repl int) {
-	if repl > 0 {
-		o.cqlReplicationFactor = repl
-	} else {
-		numHosts := len(o.CQLHosts)
-		if numHosts > 0 {
-			quorum := int(numHosts / 2.0) + 1
-			if quorum > defaultReplicationFactor {
-				o.cqlReplicationFactor = quorum
-			} else {
-				o.cqlReplicationFactor = defaultReplicationFactor
-			}
-		}
-	}
+	CQLReplicationFactor int
 }
 
 func (o *Oinker) NewGraph() inject.Graph {
@@ -50,7 +32,7 @@ func (o *Oinker) NewGraph() inject.Graph {
 
 	var oinkRepo model.OinkRepo
 	if len(o.CQLHosts) > 0 {
-		graph.Define(&oinkRepo, inject.NewProvider(service.NewCQLOinkRepo, &cqlSession, &o.cqlReplicationFactor))
+		graph.Define(&oinkRepo, inject.NewProvider(service.NewCQLOinkRepo, &cqlSession, &o.CQLReplicationFactor))
 	} else {
 		graph.Define(&oinkRepo, inject.NewProvider(service.NewMockOinkRepo))
 	}
