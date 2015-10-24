@@ -3,6 +3,11 @@
 	"GoVersion": "go1.5.1",
 	"Deps": [
 		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.8.2-6-g0f2a495",
+			"Rev": "0f2a4955b11372eec5a4b95d907eaf8379b835d0"
+		},
+		{
 			"ImportPath": "github.com/dustin/go-humanize",
 			"Rev": "c20a8bde38c8f5ba06f6600edf473705c96829d1"
 		},
@@ -37,7 +42,7 @@
 		},
 		{
 			"ImportPath": "github.com/karlkfi/inject",
-			"Rev": "dbcebf18384a357337da5c99edbd1675347b5bd3"
+			"Rev": "fe06da2f020c637f82e23c3a2b5e8d9e711baf2b"
 		},
 		{
 			"ImportPath": "github.com/satori/go.uuid",
