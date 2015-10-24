@@ -21,6 +21,10 @@ items:
         - name: server
           image: karlkfi/oinker-go:latest
           imagePullPolicy: Always
+          command:
+          - "oinker"
+          - "--cassandra-addr=cassandra-dcos-node.cassandra.dcos.mesos"
+          - "--cassandra-repl=3"
           ports:
           - name: http
             containerPort: 8080

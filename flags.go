@@ -13,11 +13,15 @@ type flags struct {
 	cassandraAddr *string
 	cassandraSRV *string
 	cassandraDNS *string
+	cassandraRepl *int
 }
 
 func (c *flags) addSet(s *flag.FlagSet) {
 	cassandraAddr := s.String("cassandra-addr", "", "Address to a single Cassandra node")
 	c.cassandraAddr = cassandraAddr
+
+	cassandraRepl := s.Int("cassandra-repl", -1, "Replication factor to use for the oinker keyspace in Cassandra (defaults to max(3, floor(len(SRV records)/2.0)+1)")
+	c.cassandraRepl = cassandraRepl
 
 	cassandraSRV := s.String("cassandra-srv", "", "DNS service name of the Cassandra cluster")
 	c.cassandraSRV = cassandraSRV

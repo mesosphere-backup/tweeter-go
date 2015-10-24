@@ -5,9 +5,9 @@ import (
 
 	"github.com/facebookgo/grace/gracehttp"
 	"github.com/karlkfi/inject"
+	log "github.com/Sirupsen/logrus"
 
 	"net/http"
-	"log"
 	"flag"
 	"net"
 	"fmt"
@@ -19,7 +19,7 @@ import (
 func main() {
 	flagSet := flag.CommandLine
 	flags := parseFlags(flagSet)
-	log.Printf("Flags: %+v", flags)
+	log.Infof("Flags: %+v", flags)
 
 	oinker := &Oinker{}
 
@@ -35,13 +35,17 @@ func main() {
 		oinker.CQLHosts = hosts
 	}
 
-	graph := oinker.NewGraph()
+	oinker.SetCQLReplicationFactor(*flags.cassandraRepl)
 
+	graph := oinker.NewGraph()
+	defer graph.Finalize()
+
+	// initialize cassandra (connection, keyspace, tables)
 	var oinkRepo model.OinkRepo
 	inject.ExtractAssignable(graph, &oinkRepo)
-	err := oinkRepo.Init()
-	if err != nil {
-		log.Fatalf("Error Initializing Repo: %s", err)
+	svc, ok := oinkRepo.(inject.Initializable)
+	if ok {
+		svc.Initialize()
 	}
 
 	var mux controller.MuxServer
@@ -50,7 +54,7 @@ func main() {
 	var controllers []controller.Controller
 	inject.FindAssignable(graph, &controllers)
 	for _, c := range controllers {
-		log.Println("Registering controller:", c.Name())
+		log.Infof("Registering controller:", c.Name())
 		c.RegisterHandlers(mux)
 	}
 
@@ -65,8 +69,8 @@ func lookupCassandraHosts(service, dns string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Looking up SRV record (srv: %s, dns: %s): %s", service, dns, err)
 	}
-	log.Printf("CNAME: %s", cname)
-	log.Printf("SRVs: %+v", srvs)
+	log.Infof("CNAME: %s", cname)
+	log.Infof("SRVs: %+v", srvs)
 
 	if len(srvs) == 0 {
 		return nil, fmt.Errorf("No SRV records found (srv: %s, dns: %s)", service, dns)

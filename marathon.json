@@ -15,6 +15,7 @@
       ]
     }
   },
+  "cmd": "oinker --cassandra-addr=cassandra-dcos-node.cassandra.dcos.mesos --cassandra-repl=3",
   "healthChecks": [{
     "protocol": "TCP",
     "gracePeriodSeconds": 600,

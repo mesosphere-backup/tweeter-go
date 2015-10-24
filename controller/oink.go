@@ -3,11 +3,12 @@ package controller
 import (
 	"github.com/karlkfi/oinker-go/model"
 
+	log "github.com/Sirupsen/logrus"
+
 	"net/http"
 	"fmt"
 	"encoding/json"
 	"strings"
-	"log"
 )
 
 type OinkController struct {
@@ -35,7 +36,7 @@ func (c *OinkController) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("Path:", r.URL.Path, "Method:", r.Method, "Form:", r.Form)
+	log.Debug("Path:", r.URL.Path, "Method:", r.Method, "Form:", r.Form)
 	switch r.Method {
 	case "GET":
 		c.Get(w, r)
@@ -110,7 +111,7 @@ func (c *OinkController) Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return //TODO: redirect to index with error popup?
 	}
-	log.Printf("Added Oink: %+v\n", oink)
+	log.Debugf("Added Oink: %+v\n", oink)
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }

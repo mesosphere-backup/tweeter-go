@@ -5,11 +5,11 @@ import (
 	"github.com/karlkfi/oinker-go/view"
 
 	"github.com/dustin/go-humanize"
+	log "github.com/Sirupsen/logrus"
 
 	"net/http"
 	"html/template"
 	"time"
-	"log"
 	"fmt"
 )
 
@@ -32,6 +32,14 @@ func (c *IndexController) RegisterHandlers(server MuxServer) {
 }
 
 func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
+	err := c.handleInner(w, r)
+	if err != nil {
+		log.Errorf("Error (%d) handling request (%s, %s, %s): %s", err.Code(), c.Name(), r.Method, r.URL.Path, err)
+		http.Error(w, err.Error(), err.Code())
+	}
+}
+
+func (c *IndexController) handleInner(w http.ResponseWriter, r *http.Request) HTTPError {
 	t := template.Must(template.New(
 		"layout.html.tmpl",
 	).Funcs(template.FuncMap{
@@ -44,10 +52,9 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 
 	oinks, err := c.repo.All()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Retrieving all oinks: %s", err))
 	}
-	log.Printf("Oinks: %+v\n", oinks)
+	log.Debugf("Oinks: %+v\n", oinks)
 
 	err = t.Execute(w, view.Index{
 		Page: view.Page{
@@ -57,9 +64,10 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 		IsEmpty: len(oinks) == 0,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Rendering templates: %s", err))
 	}
+
+	return nil
 }
 
 func (c *IndexController) TimeSince(input time.Time) string {
