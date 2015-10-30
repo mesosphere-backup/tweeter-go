@@ -12,6 +12,7 @@ Code dependencies are vendored with Godep:
 - [Facebook's Grace library](http://github.com/facebookgo/grace) - graceful shutdown
 - [Inject](http://github.com/karlkfi/inject) - dependency injection
 - [Humanize](http://github.com/dustin/go-humanize) - readable units
+- [Logrus](http://github.com/Sirupsen/logrus) - structured, leveled logging
 
 
 ## Compilation
