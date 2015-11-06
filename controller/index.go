@@ -15,11 +15,13 @@ import (
 
 type IndexController struct {
 	repo model.OinkRepo
+	instanceName string
 }
 
-func NewIndexController(repo model.OinkRepo) *IndexController {
+func NewIndexController(repo model.OinkRepo, instanceName string) *IndexController {
 	return &IndexController{
 		repo: repo,
+		instanceName: instanceName,
 	}
 }
 
@@ -41,12 +43,12 @@ func (c *IndexController) Handle(w http.ResponseWriter, r *http.Request) {
 
 func (c *IndexController) handleInner(w http.ResponseWriter, r *http.Request) HTTPError {
 	t := template.Must(template.New(
-		"layout.html.tmpl",
+		"page.html.tmpl",
 	).Funcs(template.FuncMap{
 		"timeSince": c.TimeSince,
 		"avatarURL": c.AvatarURL,
 	}).ParseFiles(
-		"templates/layout.html.tmpl",
+		"templates/page.html.tmpl",
 		"templates/index.html.tmpl",
 	))
 
@@ -59,6 +61,7 @@ func (c *IndexController) handleInner(w http.ResponseWriter, r *http.Request) HT
 	err = t.Execute(w, view.Index{
 		Page: view.Page{
 			RelativeRootPath: ".",
+			InstanceName: c.instanceName,
 		},
 		Oinks: oinks,
 		IsEmpty: len(oinks) == 0,

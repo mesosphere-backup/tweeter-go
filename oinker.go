@@ -9,6 +9,7 @@ import (
 	"github.com/gocql/gocql"
 
 	"net/http"
+	"os"
 )
 
 type Oinker struct {
@@ -18,6 +19,15 @@ type Oinker struct {
 
 func (o *Oinker) NewGraph() inject.Graph {
 	graph := inject.NewGraph()
+
+	var instanceName string
+	graph.Define(&instanceName, inject.NewProvider(func() string {
+		name := os.Getenv("OINKER_INSTANCE_NAME")
+		if name == "" {
+			return "instance-unknown"
+		}
+		return name
+	}))
 
 	var server *http.ServeMux
 	graph.Define(&server, inject.NewProvider(http.NewServeMux))
@@ -41,7 +51,7 @@ func (o *Oinker) NewGraph() inject.Graph {
 	graph.Define(&assetsController, inject.NewProvider(controller.NewAssetsController))
 
 	var indexController *controller.IndexController
-	graph.Define(&indexController, inject.NewProvider(controller.NewIndexController, &oinkRepo))
+	graph.Define(&indexController, inject.NewProvider(controller.NewIndexController, &oinkRepo, &instanceName))
 
 	var oinkController *controller.OinkController
 	graph.Define(&oinkController, inject.NewProvider(controller.NewOinkController, &oinkRepo))
