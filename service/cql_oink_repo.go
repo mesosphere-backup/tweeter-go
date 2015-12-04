@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/karlkfi/oinker-go/model"
+	"github.com/mesosphere/oinker-go/model"
 
 	"github.com/gocql/gocql"
 	"github.com/satori/go.uuid"

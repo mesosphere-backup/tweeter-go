@@ -1,7 +1,7 @@
 .PHONY: all
 all: binary
 
-ORG=karlkfi
+ORG=mesosphere
 REPO=$(shell git rev-parse --show-toplevel | xargs basename)
 REPO_PATH=github.com/$(ORG)/$(REPO)
 

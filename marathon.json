@@ -4,7 +4,7 @@
   "container": {
     "type": "DOCKER",
     "docker": {
-      "image": "karlkfi/oinker-go:latest",
+      "image": "mesosphere/oinker-go:latest",
       "network": "BRIDGE",
       "portMappings": [
         {

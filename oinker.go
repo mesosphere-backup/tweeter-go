@@ -1,9 +1,9 @@
 package main
 
 import (
-	"github.com/karlkfi/oinker-go/controller"
-	"github.com/karlkfi/oinker-go/model"
-	"github.com/karlkfi/oinker-go/service"
+	"github.com/mesosphere/oinker-go/controller"
+	"github.com/mesosphere/oinker-go/model"
+	"github.com/mesosphere/oinker-go/service"
 
 	"github.com/karlkfi/inject"
 	"github.com/gocql/gocql"

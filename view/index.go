@@ -1,7 +1,7 @@
 package view
 
 import (
-	"github.com/karlkfi/oinker-go/model"
+	"github.com/mesosphere/oinker-go/model"
 )
 
 type Index struct {

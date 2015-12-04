@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/karlkfi/oinker-go/model"
+	"github.com/mesosphere/oinker-go/model"
 
 	log "github.com/Sirupsen/logrus"
 

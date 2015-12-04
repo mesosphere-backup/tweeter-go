@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"github.com/karlkfi/oinker-go/model"
-	"github.com/karlkfi/oinker-go/view"
+	"github.com/mesosphere/oinker-go/model"
+	"github.com/mesosphere/oinker-go/view"
 
 	"github.com/dustin/go-humanize"
 	log "github.com/Sirupsen/logrus"

@@ -19,7 +19,7 @@ items:
       spec:
         containers:
         - name: server
-          image: karlkfi/oinker-go:latest
+          image: mesosphere/oinker-go:latest
           imagePullPolicy: Always
           command:
           - "oinker"

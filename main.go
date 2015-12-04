@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/karlkfi/oinker-go/controller"
-	"github.com/karlkfi/oinker-go/model"
+	"github.com/mesosphere/oinker-go/controller"
+	"github.com/mesosphere/oinker-go/model"
 
 	"github.com/facebookgo/grace/gracehttp"
 	"github.com/karlkfi/inject"

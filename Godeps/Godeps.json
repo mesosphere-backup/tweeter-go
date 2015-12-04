@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/karlkfi/oinker-go",
+	"ImportPath": "github.com/mesosphere/oinker-go",
 	"GoVersion": "go1.5.1",
 	"Deps": [
 		{
