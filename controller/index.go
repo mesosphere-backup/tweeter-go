@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/mesosphere/oinker-go/model"
+	"github.com/mesosphere/oinker-go/service"
 	"github.com/mesosphere/oinker-go/view"
 
 	"github.com/dustin/go-humanize"
@@ -14,11 +14,11 @@ import (
 )
 
 type IndexController struct {
-	repo model.OinkRepo
+	repo service.OinkRepo
 	instanceName string
 }
 
-func NewIndexController(repo model.OinkRepo, instanceName string) *IndexController {
+func NewIndexController(repo service.OinkRepo, instanceName string) *IndexController {
 	return &IndexController{
 		repo: repo,
 		instanceName: instanceName,

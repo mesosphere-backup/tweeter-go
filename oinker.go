@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/mesosphere/oinker-go/controller"
-	"github.com/mesosphere/oinker-go/model"
 	"github.com/mesosphere/oinker-go/service"
 
 	"github.com/karlkfi/inject"
@@ -40,12 +39,15 @@ func (o *Oinker) NewGraph() inject.Graph {
 	var cqlSession *service.CQLSession
 	graph.Define(&cqlSession, inject.NewProvider(service.NewCQLSession, &cqlCluster))
 
-	var oinkRepo model.OinkRepo
+	var oinkRepo service.OinkRepo
 	if len(o.CQLHosts) > 0 {
 		graph.Define(&oinkRepo, inject.NewProvider(service.NewCQLOinkRepo, &cqlSession, &o.CQLReplicationFactor))
 	} else {
 		graph.Define(&oinkRepo, inject.NewProvider(service.NewMockOinkRepo))
 	}
+
+	var readyController *controller.ReadyController
+	graph.Define(&readyController, inject.NewProvider(controller.NewReadyController, &oinkRepo, &instanceName))
 
 	var assetsController *controller.AssetsController
 	graph.Define(&assetsController, inject.NewProvider(controller.NewAssetsController))

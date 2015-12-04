@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/mesosphere/oinker-go/model"
+	"github.com/mesosphere/oinker-go/service"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -12,10 +13,10 @@ import (
 )
 
 type OinkController struct {
-	repo model.OinkRepo
+	repo service.OinkRepo
 }
 
-func NewOinkController(repo model.OinkRepo) *OinkController {
+func NewOinkController(repo service.OinkRepo) *OinkController {
 	return &OinkController{
 		repo: repo,
 	}

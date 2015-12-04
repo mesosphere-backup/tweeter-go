@@ -27,6 +27,21 @@ func NewCQLOinkRepo(session *CQLSession, replicationFactor int) *CQLOinkRepo {
 	}
 }
 
+func (r *CQLOinkRepo) CheckReady() error {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	if !r.initialized {
+		return errors.New("Uninitialized repo")
+	}
+
+	iter := r.session.Query("SELECT now() FROM oinker.oinks").Iter()
+	if err := iter.Close(); err != nil {
+		return fmt.Errorf("Selecting now(): %s", err)
+	}
+
+	return nil
+}
+
 func (r *CQLOinkRepo) Initialize() {
 	r.lock.Lock()
 	defer r.lock.Unlock()

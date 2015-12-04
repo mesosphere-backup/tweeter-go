@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/mesosphere/oinker-go/controller"
-	"github.com/mesosphere/oinker-go/model"
+	"github.com/mesosphere/oinker-go/service"
 
 	"github.com/facebookgo/grace/gracehttp"
 	"github.com/karlkfi/inject"
@@ -28,7 +28,7 @@ func main() {
 	defer graph.Finalize()
 
 	// initialize cassandra (connection, keyspace, tables)
-	var oinkRepo model.OinkRepo
+	var oinkRepo service.OinkRepo
 	inject.ExtractAssignable(graph, &oinkRepo)
 	svc, ok := oinkRepo.(inject.Initializable)
 	if ok {

@@ -20,6 +20,11 @@ func NewMockOinkRepo() *MockOinkRepo {
 	}
 }
 
+func (r *MockOinkRepo) CheckReady() error {
+	// in-memory repo is always ready
+	return nil
+}
+
 func (r *MockOinkRepo) Create(o model.Oink) (model.Oink, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
