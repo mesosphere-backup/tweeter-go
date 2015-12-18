@@ -87,6 +87,8 @@ Run in [Kubernetes](http://kubernetes.io/):
 kubectl create -f kubernetes.yaml
 ```
 
+By default, `kubernetes.yaml` assumes you have 3 public slave nodes and want 1 Oinker instance on each. With this configuration, Oinker can be reached on the default HTTP port (80) through the public slave DNS URL. On AWS, the DNS should automatically handle round-robin for requests to Oinker. Load Balancing could also be configured, using AWS Elastic Load Balancing.
+
 
 ## Usage
 
