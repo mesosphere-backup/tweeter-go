@@ -16,6 +16,8 @@ items:
       metadata:
         labels:
           app: oinker
+        annotations:
+          k8s.mesosphere.io/roles: slave_public
       spec:
         containers:
         - name: server
@@ -39,6 +41,7 @@ items:
           ports:
           - name: http
             containerPort: 8080
+            hostPort: 80
           resources:
             limits:
               cpu: 0.25
