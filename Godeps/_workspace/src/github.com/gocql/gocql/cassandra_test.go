@@ -4,9 +4,7 @@ package gocql
 
 import (
 	"bytes"
-	"flag"
-	"fmt"
-	"log"
+	"io"
 	"math"
 	"math/big"
 	"net"
@@ -18,131 +16,10 @@ import (
 	"time"
 	"unicode"
 
+	"golang.org/x/net/context"
+
 	"gopkg.in/inf.v0"
 )
-
-var (
-	flagCluster      = flag.String("cluster", "127.0.0.1", "a comma-separated list of host:port tuples")
-	flagProto        = flag.Int("proto", 2, "protcol version")
-	flagCQL          = flag.String("cql", "3.0.0", "CQL version")
-	flagRF           = flag.Int("rf", 1, "replication factor for test keyspace")
-	clusterSize      = flag.Int("clusterSize", 1, "the expected size of the cluster")
-	flagRetry        = flag.Int("retries", 5, "number of times to retry queries")
-	flagAutoWait     = flag.Duration("autowait", 1000*time.Millisecond, "time to wait for autodiscovery to fill the hosts poll")
-	flagRunSslTest   = flag.Bool("runssl", false, "Set to true to run ssl test")
-	flagRunAuthTest  = flag.Bool("runauth", false, "Set to true to run authentication test")
-	flagCompressTest = flag.String("compressor", "", "compressor to use")
-	flagTimeout      = flag.Duration("gocql.timeout", 5*time.Second, "sets the connection `timeout` for all operations")
-	clusterHosts     []string
-)
-
-func init() {
-	flag.Parse()
-	clusterHosts = strings.Split(*flagCluster, ",")
-	log.SetFlags(log.Lshortfile | log.LstdFlags)
-}
-
-func addSslOptions(cluster *ClusterConfig) *ClusterConfig {
-	if *flagRunSslTest {
-		cluster.SslOpts = &SslOptions{
-			CertPath:               "testdata/pki/gocql.crt",
-			KeyPath:                "testdata/pki/gocql.key",
-			CaPath:                 "testdata/pki/ca.crt",
-			EnableHostVerification: false,
-		}
-	}
-	return cluster
-}
-
-var initOnce sync.Once
-
-func createTable(s *Session, table string) error {
-	if err := s.control.query(table).Close(); err != nil {
-		return err
-	}
-
-	return s.control.awaitSchemaAgreement()
-}
-
-func createCluster() *ClusterConfig {
-	cluster := NewCluster(clusterHosts...)
-	cluster.ProtoVersion = *flagProto
-	cluster.CQLVersion = *flagCQL
-	cluster.Timeout = *flagTimeout
-	cluster.Consistency = Quorum
-	if *flagRetry > 0 {
-		cluster.RetryPolicy = &SimpleRetryPolicy{NumRetries: *flagRetry}
-	}
-
-	switch *flagCompressTest {
-	case "snappy":
-		cluster.Compressor = &SnappyCompressor{}
-	case "":
-	default:
-		panic("invalid compressor: " + *flagCompressTest)
-	}
-
-	cluster = addSslOptions(cluster)
-	return cluster
-}
-
-func createKeyspace(tb testing.TB, cluster *ClusterConfig, keyspace string) {
-	c := *cluster
-	c.Keyspace = "system"
-	c.Timeout = 20 * time.Second
-	session, err := c.CreateSession()
-	if err != nil {
-		tb.Fatal("createSession:", err)
-	}
-
-	err = session.control.query(`DROP KEYSPACE IF EXISTS ` + keyspace).Close()
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	if err = session.control.awaitSchemaAgreement(); err != nil {
-		tb.Fatal(err)
-	}
-
-	err = session.control.query(fmt.Sprintf(`CREATE KEYSPACE %s
-	WITH replication = {
-		'class' : 'SimpleStrategy',
-		'replication_factor' : %d
-	}`, keyspace, *flagRF)).Close()
-
-	if err != nil {
-		tb.Fatal(err)
-	}
-
-	// the schema version might be out of data between 2 nodes, so wait for the
-	// cluster to settle.
-	// TODO(zariel): use events here to know when the cluster has resolved to the
-	// new schema version
-	if err = session.control.awaitSchemaAgreement(); err != nil {
-		tb.Fatal(err)
-	}
-}
-
-func createSessionFromCluster(cluster *ClusterConfig, tb testing.TB) *Session {
-	// Drop and re-create the keyspace once. Different tests should use their own
-	// individual tables, but can assume that the table does not exist before.
-	initOnce.Do(func() {
-		createKeyspace(tb, cluster, "gocql_test")
-	})
-
-	cluster.Keyspace = "gocql_test"
-	session, err := cluster.CreateSession()
-	if err != nil {
-		tb.Fatal("createSession:", err)
-	}
-
-	return session
-}
-
-func createSession(tb testing.TB) *Session {
-	cluster := createCluster()
-	return createSessionFromCluster(cluster, tb)
-}
 
 // TestAuthentication verifies that gocql will work with a host configured to only accept authenticated connections
 func TestAuthentication(t *testing.T) {
@@ -175,7 +52,6 @@ func TestAuthentication(t *testing.T) {
 func TestRingDiscovery(t *testing.T) {
 	cluster := createCluster()
 	cluster.Hosts = clusterHosts[:1]
-	cluster.DiscoverHosts = true
 
 	session := createSessionFromCluster(cluster, t)
 	defer session.Close()
@@ -203,6 +79,41 @@ func TestEmptyHosts(t *testing.T) {
 	}
 }
 
+func TestInvalidPeerEntry(t *testing.T) {
+	session := createSession(t)
+
+	// rack, release_version, schema_version, tokens are all null
+	query := session.Query("INSERT into system.peers (peer, data_center, host_id, rpc_address) VALUES (?, ?, ?, ?)",
+		"169.254.235.45",
+		"datacenter1",
+		"35c0ec48-5109-40fd-9281-9e9d4add2f1e",
+		"169.254.235.45",
+	)
+
+	if err := query.Exec(); err != nil {
+		t.Fatal(err)
+	}
+
+	session.Close()
+
+	cluster := createCluster()
+	cluster.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
+	session = createSessionFromCluster(cluster, t)
+	defer func() {
+		session.Query("DELETE from system.peers where peer = ?", "169.254.235.45").Exec()
+		session.Close()
+	}()
+
+	// check we can perform a query
+	iter := session.Query("select peer from system.peers").Iter()
+	var peer string
+	for iter.Scan(&peer) {
+	}
+	if err := iter.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 //TestUseStatementError checks to make sure the correct error is returned when the user tries to execute a use statement.
 func TestUseStatementError(t *testing.T) {
 	session := createSession(t)
@@ -210,10 +121,10 @@ func TestUseStatementError(t *testing.T) {
 
 	if err := session.Query("USE gocql_test").Exec(); err != nil {
 		if err != ErrUseStmt {
-			t.Error("expected ErrUseStmt, got " + err.Error())
+			t.Fatalf("expected ErrUseStmt, got " + err.Error())
 		}
 	} else {
-		t.Error("expected err, got nil.")
+		t.Fatal("expected err, got nil.")
 	}
 }
 
@@ -224,11 +135,11 @@ func TestInvalidKeyspace(t *testing.T) {
 	session, err := cluster.CreateSession()
 	if err != nil {
 		if err != ErrNoConnectionsStarted {
-			t.Errorf("Expected ErrNoConnections but got %v", err)
+			t.Fatalf("Expected ErrNoConnections but got %v", err)
 		}
 	} else {
 		session.Close() //Clean up the session
-		t.Error("expected err, got nil.")
+		t.Fatal("expected err, got nil.")
 	}
 }
 
@@ -244,19 +155,19 @@ func TestTracing(t *testing.T) {
 	trace := NewTraceWriter(session, buf)
 
 	if err := session.Query(`INSERT INTO trace (id) VALUES (?)`, 42).Trace(trace).Exec(); err != nil {
-		t.Error("insert:", err)
+		t.Fatal("insert:", err)
 	} else if buf.Len() == 0 {
-		t.Error("insert: failed to obtain any tracing")
+		t.Fatal("insert: failed to obtain any tracing")
 	}
 	buf.Reset()
 
 	var value int
 	if err := session.Query(`SELECT id FROM trace WHERE id = ?`, 42).Trace(trace).Scan(&value); err != nil {
-		t.Error("select:", err)
+		t.Fatal("select:", err)
 	} else if value != 42 {
-		t.Errorf("value: expected %d, got %d", 42, value)
+		t.Fatalf("value: expected %d, got %d", 42, value)
 	} else if buf.Len() == 0 {
-		t.Error("select: failed to obtain any tracing")
+		t.Fatal("select: failed to obtain any tracing")
 	}
 }
 
@@ -296,9 +207,10 @@ func TestCAS(t *testing.T) {
 		t.Skip("lightweight transactions not supported. Please use Cassandra >= 2.0")
 	}
 
-	session := createSession(t)
+	cluster := createCluster()
+	cluster.SerialConsistency = LocalSerial
+	session := createSessionFromCluster(cluster, t)
 	defer session.Close()
-	session.cfg.SerialConsistency = LocalSerial
 
 	if err := createTable(session, `CREATE TABLE gocql_test.cas_table (
 			title         varchar,
@@ -346,8 +258,8 @@ func TestCAS(t *testing.T) {
 	}
 
 	if _, err := session.Query(`DELETE FROM cas_table WHERE title = ? and revid = ? IF last_modified = ?`,
-		title, revid, tenSecondsLater).ScanCAS(); err.Error() != "count mismatch" {
-		t.Fatalf("delete: was expecting count mismatch error but got %s", err)
+		title, revid, tenSecondsLater).ScanCAS(); !strings.HasPrefix(err.Error(), "gocql: not enough columns to scan into") {
+		t.Fatalf("delete: was expecting count mismatch error but got: %q", err.Error())
 	}
 
 	if applied, err := session.Query(`DELETE FROM cas_table WHERE title = ? and revid = ? IF last_modified = ?`,
@@ -366,7 +278,7 @@ func TestCAS(t *testing.T) {
 	if applied, _, err := session.ExecuteBatchCAS(successBatch, &titleCAS, &revidCAS, &modifiedCAS); err != nil {
 		t.Fatal("insert:", err)
 	} else if !applied {
-		t.Fatal("insert should have been applied")
+		t.Fatalf("insert should have been applied: title=%v revID=%v modified=%v", titleCAS, revidCAS, modifiedCAS)
 	}
 
 	successBatch = session.NewBatch(LoggedBatch)
@@ -383,7 +295,7 @@ func TestCAS(t *testing.T) {
 	if applied, _, err := session.ExecuteBatchCAS(successBatch, &titleCAS, &revidCAS, &modifiedCAS); err != nil {
 		t.Fatal("insert:", err)
 	} else if applied {
-		t.Fatal("insert shouldn't have been applied")
+		t.Fatalf("insert should have been applied: title=%v revID=%v modified=%v", titleCAS, revidCAS, modifiedCAS)
 	}
 
 	insertBatch := session.NewBatch(LoggedBatch)
@@ -399,10 +311,10 @@ func TestCAS(t *testing.T) {
 	if applied, iter, err := session.ExecuteBatchCAS(failBatch, &titleCAS, &revidCAS, &modifiedCAS); err != nil {
 		t.Fatal("insert:", err)
 	} else if applied {
-		t.Fatal("insert shouldn't have been applied")
+		t.Fatalf("insert should have been applied: title=%v revID=%v modified=%v", titleCAS, revidCAS, modifiedCAS)
 	} else {
 		if scan := iter.Scan(&applied, &titleCAS, &revidCAS, &modifiedCAS); scan && applied {
-			t.Fatal("insert shouldn't have been applied")
+			t.Fatalf("insert should have been applied: title=%v revID=%v modified=%v", titleCAS, revidCAS, modifiedCAS)
 		} else if !scan {
 			t.Fatal("should have scanned another row")
 		}
@@ -438,7 +350,7 @@ func TestMapScanCAS(t *testing.T) {
 		title, revid, modified, deleted).MapScanCAS(mapCAS); err != nil {
 		t.Fatal("insert:", err)
 	} else if !applied {
-		t.Fatal("insert should have been applied")
+		t.Fatalf("insert should have been applied: title=%v revID=%v modified=%v", title, revid, modified)
 	}
 
 	mapCAS = map[string]interface{}{}
@@ -447,7 +359,7 @@ func TestMapScanCAS(t *testing.T) {
 		title, revid, modified, deleted).MapScanCAS(mapCAS); err != nil {
 		t.Fatal("insert:", err)
 	} else if applied {
-		t.Fatal("insert should not have been applied")
+		t.Fatalf("insert should have been applied: title=%v revID=%v modified=%v", title, revid, modified)
 	} else if title != mapCAS["title"] || revid != mapCAS["revid"] || deleted != mapCAS["deleted"] {
 		t.Fatalf("expected %s/%v/%v/%v but got %s/%v/%v%v", title, revid, modified, false, mapCAS["title"], mapCAS["revid"], mapCAS["last_modified"], mapCAS["deleted"])
 	}
@@ -587,11 +499,7 @@ func TestTooManyQueryArgs(t *testing.T) {
 	_, err := session.Query(`SELECT * FROM too_many_query_args WHERE id = ?`, 1, 2).Iter().SliceMap()
 
 	if err == nil {
-		t.Fatal("'`SELECT * FROM too_many_query_args WHERE id = ?`, 1, 2' should return an ErrQueryArgLength")
-	}
-
-	if err != ErrQueryArgLength {
-		t.Fatalf("'`SELECT * FROM too_many_query_args WHERE id = ?`, 1, 2' should return an ErrQueryArgLength, but returned: %s", err)
+		t.Fatal("'`SELECT * FROM too_many_query_args WHERE id = ?`, 1, 2' should return an error")
 	}
 
 	batch := session.NewBatch(UnloggedBatch)
@@ -599,12 +507,10 @@ func TestTooManyQueryArgs(t *testing.T) {
 	err = session.ExecuteBatch(batch)
 
 	if err == nil {
-		t.Fatal("'`INSERT INTO too_many_query_args (id, value) VALUES (?, ?)`, 1, 2, 3' should return an ErrQueryArgLength")
+		t.Fatal("'`INSERT INTO too_many_query_args (id, value) VALUES (?, ?)`, 1, 2, 3' should return an error")
 	}
 
-	if err != ErrQueryArgLength {
-		t.Fatalf("'INSERT INTO too_many_query_args (id, value) VALUES (?, ?)`, 1, 2, 3' should return an ErrQueryArgLength, but returned: %s", err)
-	}
+	// TODO: should indicate via an error code that it is an invalid arg?
 
 }
 
@@ -624,11 +530,7 @@ func TestNotEnoughQueryArgs(t *testing.T) {
 	_, err := session.Query(`SELECT * FROM not_enough_query_args WHERE id = ? and cluster = ?`, 1).Iter().SliceMap()
 
 	if err == nil {
-		t.Fatal("'`SELECT * FROM not_enough_query_args WHERE id = ? and cluster = ?`, 1' should return an ErrQueryArgLength")
-	}
-
-	if err != ErrQueryArgLength {
-		t.Fatalf("'`SELECT * FROM too_few_query_args WHERE id = ? and cluster = ?`, 1' should return an ErrQueryArgLength, but returned: %s", err)
+		t.Fatal("'`SELECT * FROM not_enough_query_args WHERE id = ? and cluster = ?`, 1' should return an error")
 	}
 
 	batch := session.NewBatch(UnloggedBatch)
@@ -636,20 +538,22 @@ func TestNotEnoughQueryArgs(t *testing.T) {
 	err = session.ExecuteBatch(batch)
 
 	if err == nil {
-		t.Fatal("'`INSERT INTO not_enough_query_args (id, cluster, value) VALUES (?, ?, ?)`, 1, 2' should return an ErrQueryArgLength")
-	}
-
-	if err != ErrQueryArgLength {
-		t.Fatalf("'INSERT INTO not_enough_query_args (id, cluster, value) VALUES (?, ?, ?)`, 1, 2' should return an ErrQueryArgLength, but returned: %s", err)
+		t.Fatal("'`INSERT INTO not_enough_query_args (id, cluster, value) VALUES (?, ?, ?)`, 1, 2' should return an error")
 	}
 }
 
 // TestCreateSessionTimeout tests to make sure the CreateSession function timeouts out correctly
 // and prevents an infinite loop of connection retries.
 func TestCreateSessionTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	go func() {
-		<-time.After(2 * time.Second)
-		t.Error("no startup timeout")
+		select {
+		case <-time.After(2 * time.Second):
+			t.Error("no startup timeout")
+		case <-ctx.Done():
+		}
 	}()
 
 	cluster := createCluster()
@@ -659,9 +563,25 @@ func TestCreateSessionTimeout(t *testing.T) {
 		session.Close()
 		t.Fatal("expected ErrNoConnectionsStarted, but no error was returned.")
 	}
+}
 
-	if err != ErrNoConnectionsStarted {
-		t.Fatalf("expected ErrNoConnectionsStarted, but received %v", err)
+func TestReconnection(t *testing.T) {
+	cluster := createCluster()
+	cluster.ReconnectInterval = 1 * time.Second
+	session := createSessionFromCluster(cluster, t)
+	defer session.Close()
+
+	h := session.ring.allHosts()[0]
+	session.handleNodeDown(net.ParseIP(h.Peer()), h.Port())
+
+	if h.State() != NodeDown {
+		t.Fatal("Host should be NodeDown but not.")
+	}
+
+	time.Sleep(cluster.ReconnectInterval + h.Version().nodeUpDelay() + 1*time.Second)
+
+	if h.State() != NodeUp {
+		t.Fatal("Host should be NodeUp but not. Failed to reconnect.")
 	}
 }
 
@@ -844,6 +764,33 @@ func matchSliceMap(t *testing.T, sliceMap []map[string]interface{}, testMap map[
 	}
 	if sliceMap[0]["testint"] != testMap["testint"] {
 		t.Fatal("returned testint did not match")
+	}
+}
+
+func TestSmallInt(t *testing.T) {
+	if *flagProto < protoVersion4 {
+		t.Skip("smallint is only supported in cassandra 2.2+")
+	}
+	session := createSession(t)
+	defer session.Close()
+	if err := createTable(session, `CREATE TABLE gocql_test.smallint_table (
+			testsmallint  smallint PRIMARY KEY,
+		)`); err != nil {
+		t.Fatal("create table:", err)
+	}
+	m := make(map[string]interface{})
+	m["testsmallint"] = int16(2)
+	sliceMap := []map[string]interface{}{m}
+	if err := session.Query(`INSERT INTO smallint_table (testsmallint) VALUES (?)`,
+		m["testsmallint"]).Exec(); err != nil {
+		t.Fatal("insert:", err)
+	}
+	if returned, retErr := session.Query(`SELECT * FROM smallint_table`).Iter().SliceMap(); retErr != nil {
+		t.Fatal("select:", retErr)
+	} else {
+		if sliceMap[0]["testsmallint"] != returned[0]["testsmallint"] {
+			t.Fatal("returned testsmallint did not match")
+		}
 	}
 }
 
@@ -1127,6 +1074,14 @@ func TestBatchQueryInfo(t *testing.T) {
 	}
 }
 
+func getRandomConn(t *testing.T, session *Session) *Conn {
+	conn := session.getConn()
+	if conn == nil {
+		t.Fatal("unable to get a connection")
+	}
+	return conn
+}
+
 func injectInvalidPreparedStatement(t *testing.T, session *Session, table string) (string, *Conn) {
 	if err := createTable(session, `CREATE TABLE gocql_test.`+table+` (
 			foo   varchar,
@@ -1135,31 +1090,41 @@ func injectInvalidPreparedStatement(t *testing.T, session *Session, table string
 	)`); err != nil {
 		t.Fatal("create:", err)
 	}
+
 	stmt := "INSERT INTO " + table + " (foo, bar) VALUES (?, 7)"
-	conn := session.pool.Pick(nil)
+
+	conn := getRandomConn(t, session)
+
 	flight := new(inflightPrepare)
-	stmtsLRU.Lock()
-	stmtsLRU.lru.Add(conn.addr+stmt, flight)
-	stmtsLRU.Unlock()
-	flight.info = QueryInfo{
-		Id: []byte{'f', 'o', 'o', 'b', 'a', 'r'},
-		Args: []ColumnInfo{
-			{
-				Keyspace: "gocql_test",
-				Table:    table,
-				Name:     "foo",
-				TypeInfo: NativeType{
-					typ: TypeVarchar,
+	key := session.stmtsLRU.keyFor(conn.addr, "", stmt)
+	session.stmtsLRU.add(key, flight)
+
+	flight.preparedStatment = &preparedStatment{
+		id: []byte{'f', 'o', 'o', 'b', 'a', 'r'},
+		request: preparedMetadata{
+			resultMetadata: resultMetadata{
+				colCount:       1,
+				actualColCount: 1,
+				columns: []ColumnInfo{
+					{
+						Keyspace: "gocql_test",
+						Table:    table,
+						Name:     "foo",
+						TypeInfo: NativeType{
+							typ: TypeVarchar,
+						},
+					},
 				},
 			},
 		},
 	}
+
 	return stmt, conn
 }
 
-func TestMissingSchemaPrepare(t *testing.T) {
+func TestPrepare_MissingSchemaPrepare(t *testing.T) {
 	s := createSession(t)
-	conn := s.pool.Pick(nil)
+	conn := getRandomConn(t, s)
 	defer s.Close()
 
 	insertQry := &Query{stmt: "INSERT INTO invalidschemaprep (val) VALUES (?)", values: []interface{}{5}, cons: s.cons,
@@ -1179,7 +1144,7 @@ func TestMissingSchemaPrepare(t *testing.T) {
 	}
 }
 
-func TestReprepareStatement(t *testing.T) {
+func TestPrepare_ReprepareStatement(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 	stmt, conn := injectInvalidPreparedStatement(t, session, "test_reprepare_statement")
@@ -1189,7 +1154,7 @@ func TestReprepareStatement(t *testing.T) {
 	}
 }
 
-func TestReprepareBatch(t *testing.T) {
+func TestPrepare_ReprepareBatch(t *testing.T) {
 	if *flagProto == 1 {
 		t.Skip("atomic batches not supported. Please use Cassandra >= 2.0")
 	}
@@ -1198,45 +1163,54 @@ func TestReprepareBatch(t *testing.T) {
 	stmt, conn := injectInvalidPreparedStatement(t, session, "test_reprepare_statement_batch")
 	batch := session.NewBatch(UnloggedBatch)
 	batch.Query(stmt, "bar")
-	if _, err := conn.executeBatch(batch); err != nil {
+	if err := conn.executeBatch(batch).Close(); err != nil {
 		t.Fatalf("Failed to execute query for reprepare statement: %v", err)
 	}
-
 }
 
 func TestQueryInfo(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	conn := session.pool.Pick(nil)
-	info, err := conn.prepareStatement("SELECT release_version, host_id FROM system.local WHERE key = ?", nil)
+	conn := getRandomConn(t, session)
+	info, err := conn.prepareStatement(context.Background(), "SELECT release_version, host_id FROM system.local WHERE key = ?", nil)
 
 	if err != nil {
 		t.Fatalf("Failed to execute query for preparing statement: %v", err)
 	}
 
-	if x := len(info.Args); x != 1 {
+	if x := len(info.request.columns); x != 1 {
 		t.Fatalf("Was not expecting meta data for %d query arguments, but got %d\n", 1, x)
 	}
 
 	if *flagProto > 1 {
-		if x := len(info.Rval); x != 2 {
+		if x := len(info.response.columns); x != 2 {
 			t.Fatalf("Was not expecting meta data for %d result columns, but got %d\n", 2, x)
 		}
 	}
 }
 
 //TestPreparedCacheEviction will make sure that the cache size is maintained
-func TestPreparedCacheEviction(t *testing.T) {
-	session := createSession(t)
+func TestPrepare_PreparedCacheEviction(t *testing.T) {
+	const maxPrepared = 4
+
+	host := clusterHosts[0]
+	cluster := createCluster()
+	cluster.MaxPreparedStmts = maxPrepared
+	cluster.Events.DisableSchemaEvents = true
+	cluster.Hosts = []string{host}
+
+	cluster.HostFilter = WhiteListHostFilter(host)
+
+	session := createSessionFromCluster(cluster, t)
 	defer session.Close()
-	stmtsLRU.Lock()
-	stmtsLRU.Max(4)
-	stmtsLRU.Unlock()
 
 	if err := createTable(session, "CREATE TABLE gocql_test.prepcachetest (id int,mod int,PRIMARY KEY (id))"); err != nil {
 		t.Fatalf("failed to create table with error '%v'", err)
 	}
+	// clear the cache
+	session.stmtsLRU.clear()
+
 	//Fill the table
 	for i := 0; i < 2; i++ {
 		if err := session.Query("INSERT INTO prepcachetest (id,mod) VALUES (?, ?)", i, 10000%(i+1)).Exec(); err != nil {
@@ -1270,52 +1244,44 @@ func TestPreparedCacheEviction(t *testing.T) {
 		t.Fatalf("insert into prepcachetest failed, error '%v'", err)
 	}
 
-	stmtsLRU.Lock()
+	session.stmtsLRU.mu.Lock()
+	defer session.stmtsLRU.mu.Unlock()
 
 	//Make sure the cache size is maintained
-	if stmtsLRU.lru.Len() != stmtsLRU.lru.MaxEntries {
-		t.Fatalf("expected cache size of %v, got %v", stmtsLRU.lru.MaxEntries, stmtsLRU.lru.Len())
+	if session.stmtsLRU.lru.Len() != session.stmtsLRU.lru.MaxEntries {
+		t.Fatalf("expected cache size of %v, got %v", session.stmtsLRU.lru.MaxEntries, session.stmtsLRU.lru.Len())
 	}
 
-	//Walk through all the configured hosts and test cache retention and eviction
-	var selFound, insFound, updFound, delFound, selEvict bool
-	for i := range session.cfg.Hosts {
-		_, ok := stmtsLRU.lru.Get(session.cfg.Hosts[i] + ":9042gocql_testSELECT id,mod FROM prepcachetest WHERE id = 1")
-		selFound = selFound || ok
+	// Walk through all the configured hosts and test cache retention and eviction
+	for _, host := range session.cfg.Hosts {
+		_, ok := session.stmtsLRU.lru.Get(session.stmtsLRU.keyFor(host+":9042", session.cfg.Keyspace, "SELECT id,mod FROM prepcachetest WHERE id = 0"))
+		if ok {
+			t.Errorf("expected first select to be purged but was in cache for host=%q", host)
+		}
 
-		_, ok = stmtsLRU.lru.Get(session.cfg.Hosts[i] + ":9042gocql_testINSERT INTO prepcachetest (id,mod) VALUES (?, ?)")
-		insFound = insFound || ok
+		_, ok = session.stmtsLRU.lru.Get(session.stmtsLRU.keyFor(host+":9042", session.cfg.Keyspace, "SELECT id,mod FROM prepcachetest WHERE id = 1"))
+		if !ok {
+			t.Errorf("exepected second select to be in cache for host=%q", host)
+		}
 
-		_, ok = stmtsLRU.lru.Get(session.cfg.Hosts[i] + ":9042gocql_testUPDATE prepcachetest SET mod = ? WHERE id = ?")
-		updFound = updFound || ok
+		_, ok = session.stmtsLRU.lru.Get(session.stmtsLRU.keyFor(host+":9042", session.cfg.Keyspace, "INSERT INTO prepcachetest (id,mod) VALUES (?, ?)"))
+		if !ok {
+			t.Errorf("expected insert to be in cache for host=%q", host)
+		}
 
-		_, ok = stmtsLRU.lru.Get(session.cfg.Hosts[i] + ":9042gocql_testDELETE FROM prepcachetest WHERE id = ?")
-		delFound = delFound || ok
+		_, ok = session.stmtsLRU.lru.Get(session.stmtsLRU.keyFor(host+":9042", session.cfg.Keyspace, "UPDATE prepcachetest SET mod = ? WHERE id = ?"))
+		if !ok {
+			t.Errorf("expected update to be in cached for host=%q", host)
+		}
 
-		_, ok = stmtsLRU.lru.Get(session.cfg.Hosts[i] + ":9042gocql_testSELECT id,mod FROM prepcachetest WHERE id = 0")
-		selEvict = selEvict || !ok
-	}
-
-	stmtsLRU.Unlock()
-
-	if !selEvict {
-		t.Fatalf("expected first select statement to be purged, but statement was found in the cache.")
-	}
-	if !selFound {
-		t.Fatalf("expected second select statement to be cached, but statement was purged or not prepared.")
-	}
-	if !insFound {
-		t.Fatalf("expected insert statement to be cached, but statement was purged or not prepared.")
-	}
-	if !updFound {
-		t.Fatalf("expected update statement to be cached, but statement was purged or not prepared.")
-	}
-	if !delFound {
-		t.Error("expected delete statement to be cached, but statement was purged or not prepared.")
+		_, ok = session.stmtsLRU.lru.Get(session.stmtsLRU.keyFor(host+":9042", session.cfg.Keyspace, "DELETE FROM prepcachetest WHERE id = ?"))
+		if !ok {
+			t.Errorf("expected delete to be cached for host=%q", host)
+		}
 	}
 }
 
-func TestPreparedCacheKey(t *testing.T) {
+func TestPrepare_PreparedCacheKey(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
@@ -1459,6 +1425,28 @@ func TestVarint(t *testing.T) {
 
 	if result != -1 {
 		t.Errorf("Expected -1, was %d", result)
+	}
+
+	if err := session.Query(`INSERT INTO varint_test (id, test) VALUES (?, ?)`, "id", nil).Exec(); err != nil {
+		t.Fatalf("insert varint: %v", err)
+	}
+
+	if err := session.Query("SELECT test FROM varint_test").Scan(&result); err != nil {
+		t.Fatalf("select from varint_test failed: %v", err)
+	}
+
+	if result != 0 {
+		t.Errorf("Expected 0, was %d", result)
+	}
+
+	var nullableResult *int
+
+	if err := session.Query("SELECT test FROM varint_test").Scan(&nullableResult); err != nil {
+		t.Fatalf("select from varint_test failed: %v", err)
+	}
+
+	if nullableResult != nil {
+		t.Errorf("Expected nil, was %d", nullableResult)
 	}
 
 	if err := session.Query(`INSERT INTO varint_test (id, test) VALUES (?, ?)`, "id", int64(math.MaxInt32)+1).Exec(); err != nil {
@@ -1900,7 +1888,7 @@ func TestRoutingKey(t *testing.T) {
 		t.Fatalf("failed to create table with error '%v'", err)
 	}
 
-	routingKeyInfo, err := session.routingKeyInfo("SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err := session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -1924,7 +1912,7 @@ func TestRoutingKey(t *testing.T) {
 	}
 
 	// verify the cache is working
-	routingKeyInfo, err = session.routingKeyInfo("SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_single_routing_key WHERE second_id=? AND first_id=?")
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -1958,7 +1946,7 @@ func TestRoutingKey(t *testing.T) {
 		t.Errorf("Expected routing key %v but was %v", expectedRoutingKey, routingKey)
 	}
 
-	routingKeyInfo, err = session.routingKeyInfo("SELECT * FROM test_composite_routing_key WHERE second_id=? AND first_id=?")
+	routingKeyInfo, err = session.routingKeyInfo(context.Background(), "SELECT * FROM test_composite_routing_key WHERE second_id=? AND first_id=?")
 	if err != nil {
 		t.Fatalf("failed to get routing key info due to error: %v", err)
 	}
@@ -2011,13 +1999,30 @@ func TestRoutingKey(t *testing.T) {
 func TestTokenAwareConnPool(t *testing.T) {
 	cluster := createCluster()
 	cluster.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
-	cluster.DiscoverHosts = true
+
+	// force metadata query to page
+	cluster.PageSize = 1
 
 	session := createSessionFromCluster(cluster, t)
 	defer session.Close()
 
-	if session.pool.Size() != cluster.NumConns*len(cluster.Hosts) {
-		t.Errorf("Expected pool size %d but was %d", cluster.NumConns*len(cluster.Hosts), session.pool.Size())
+	expectedPoolSize := cluster.NumConns * len(session.ring.allHosts())
+
+	// wait for pool to fill
+	for i := 0; i < 10; i++ {
+		if session.pool.Size() == expectedPoolSize {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if expectedPoolSize != session.pool.Size() {
+		t.Errorf("Expected pool size %d but was %d", expectedPoolSize, session.pool.Size())
+	}
+
+	// add another cf so there are two pages when fetching table metadata from our keyspace
+	if err := createTable(session, "CREATE TABLE gocql_test.test_token_aware_other_cf (id int, data text, PRIMARY KEY (id))"); err != nil {
+		t.Fatalf("failed to create test_token_aware table with err: %v", err)
 	}
 
 	if err := createTable(session, "CREATE TABLE gocql_test.test_token_aware (id int, data text, PRIMARY KEY (id))"); err != nil {
@@ -2037,67 +2042,11 @@ func TestTokenAwareConnPool(t *testing.T) {
 	// TODO add verification that the query went to the correct host
 }
 
-type frameWriterFunc func(framer *framer, streamID int) error
-
-func (f frameWriterFunc) writeFrame(framer *framer, streamID int) error {
-	return f(framer, streamID)
-}
-
-func TestStream0(t *testing.T) {
-	session := createSession(t)
-	defer session.Close()
-
-	var conn *Conn
-	for i := 0; i < 5; i++ {
-		if conn != nil {
-			break
-		}
-
-		conn = session.pool.Pick(nil)
-	}
-
-	if conn == nil {
-		t.Fatal("no connections available in the pool")
-	}
-
-	writer := frameWriterFunc(func(f *framer, streamID int) error {
-		if streamID == 0 {
-			t.Fatal("should not use stream 0 for requests")
-		}
-		f.writeHeader(0, opError, streamID)
-		f.writeString("i am a bad frame")
-		f.wbuf[0] = 0xFF
-		return f.finishWrite()
-	})
-
-	const expErr = "gocql: error on stream 0:"
-	// need to write out an invalid frame, which we need a connection to do
-	frame, err := conn.exec(writer, nil)
-	if err == nil {
-		t.Fatal("expected to get an error on stream 0")
-	} else if !strings.HasPrefix(err.Error(), expErr) {
-		t.Fatalf("expected to get error prefix %q got %q", expErr, err.Error())
-	} else if frame != nil {
-		t.Fatalf("expected to get nil frame got %+v", frame)
-	}
-}
-
 func TestNegativeStream(t *testing.T) {
 	session := createSession(t)
 	defer session.Close()
 
-	var conn *Conn
-	for i := 0; i < 5; i++ {
-		if conn != nil {
-			break
-		}
-
-		conn = session.pool.Pick(nil)
-	}
-
-	if conn == nil {
-		t.Fatal("no connections available in the pool")
-	}
+	conn := getRandomConn(t, session)
 
 	const stream = -50
 	writer := frameWriterFunc(func(f *framer, streamID int) error {
@@ -2105,7 +2054,7 @@ func TestNegativeStream(t *testing.T) {
 		return f.finishWrite()
 	})
 
-	frame, err := conn.exec(writer, nil)
+	frame, err := conn.exec(context.Background(), writer, nil)
 	if err == nil {
 		t.Fatalf("expected to get an error on stream %d", stream)
 	} else if frame != nil {
@@ -2160,7 +2109,7 @@ func TestManualQueryPaging(t *testing.T) {
 	}
 
 	if fetched != rowsToInsert {
-		t.Fatalf("expected to fetch %d rows got %d", fetched, rowsToInsert)
+		t.Fatalf("expected to fetch %d rows got %d", rowsToInsert, fetched)
 	}
 }
 
@@ -2286,5 +2235,251 @@ func TestUDF(t *testing.T) {
 	err := session.Query(query).Exec()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDiscoverViaProxy(t *testing.T) {
+	// This (complicated) test tests that when the driver is given an initial host
+	// that is infact a proxy it discovers the rest of the ring behind the proxy
+	// and does not store the proxies address as a host in its connection pool.
+	// See https://github.com/gocql/gocql/issues/481
+	proxy, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("unable to create proxy listener: %v", err)
+	}
+
+	var (
+		wg         sync.WaitGroup
+		mu         sync.Mutex
+		proxyConns []net.Conn
+		closed     bool
+	)
+
+	go func(wg *sync.WaitGroup) {
+		cassandraAddr := JoinHostPort(clusterHosts[0], 9042)
+
+		cassandra := func() (net.Conn, error) {
+			return net.Dial("tcp", cassandraAddr)
+		}
+
+		proxyFn := func(wg *sync.WaitGroup, from, to net.Conn) {
+			defer wg.Done()
+
+			_, err := io.Copy(to, from)
+			if err != nil {
+				mu.Lock()
+				if !closed {
+					t.Error(err)
+				}
+				mu.Unlock()
+			}
+		}
+
+		// handle dials cassandra and then proxies requests and reponsess. It waits
+		// for both the read and write side of the TCP connection to close before
+		// returning.
+		handle := func(conn net.Conn) error {
+			defer conn.Close()
+
+			cass, err := cassandra()
+			if err != nil {
+				return err
+			}
+
+			mu.Lock()
+			proxyConns = append(proxyConns, cass)
+			mu.Unlock()
+
+			defer cass.Close()
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go proxyFn(&wg, conn, cass)
+
+			wg.Add(1)
+			go proxyFn(&wg, cass, conn)
+
+			wg.Wait()
+
+			return nil
+		}
+
+		for {
+			// proxy just accepts connections and then proxies them to cassandra,
+			// it runs until it is closed.
+			conn, err := proxy.Accept()
+			if err != nil {
+				mu.Lock()
+				if !closed {
+					t.Error(err)
+				}
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			proxyConns = append(proxyConns, conn)
+			mu.Unlock()
+
+			wg.Add(1)
+			go func(conn net.Conn) {
+				defer wg.Done()
+
+				if err := handle(conn); err != nil {
+					t.Error(err)
+					return
+				}
+			}(conn)
+		}
+	}(&wg)
+
+	defer wg.Wait()
+
+	proxyAddr := proxy.Addr().String()
+
+	cluster := createCluster()
+	cluster.NumConns = 1
+	// initial host is the proxy address
+	cluster.Hosts = []string{proxyAddr}
+
+	session := createSessionFromCluster(cluster, t)
+	defer session.Close()
+
+	if !session.hostSource.localHasRpcAddr {
+		t.Skip("Target cluster does not have rpc_address in system.local.")
+		goto close
+	}
+
+	// we shouldnt need this but to be safe
+	time.Sleep(1 * time.Second)
+
+	session.pool.mu.RLock()
+	for _, host := range clusterHosts {
+		if _, ok := session.pool.hostConnPools[host]; !ok {
+			t.Errorf("missing host in pool after discovery: %q", host)
+		}
+	}
+	session.pool.mu.RUnlock()
+
+close:
+	mu.Lock()
+	closed = true
+	if err := proxy.Close(); err != nil {
+		t.Log(err)
+	}
+
+	for _, conn := range proxyConns {
+		if err := conn.Close(); err != nil {
+			t.Log(err)
+		}
+	}
+	mu.Unlock()
+}
+
+func TestUnmarshallNestedTypes(t *testing.T) {
+	if *flagProto < protoVersion3 {
+		t.Skip("can not have frozen types in cassandra < 2.1.3")
+	}
+	session := createSession(t)
+	defer session.Close()
+
+	if err := createTable(session, `CREATE TABLE gocql_test.test_557 (
+		    id text PRIMARY KEY,
+		    val list<frozen<map<text, text> > >
+		)`); err != nil {
+
+		t.Fatal(err)
+	}
+
+	m := []map[string]string{
+		{"key1": "val1"},
+		{"key2": "val2"},
+	}
+
+	const id = "key"
+	err := session.Query("INSERT INTO test_557(id, val) VALUES(?, ?)", id, m).Exec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var data []map[string]string
+	if err := session.Query("SELECT val FROM test_557 WHERE id = ?", id).Scan(&data); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(data, m) {
+		t.Fatalf("%+#v != %+#v", data, m)
+	}
+}
+
+func TestSchemaReset(t *testing.T) {
+	if flagCassVersion.Major == 0 || (flagCassVersion.Before(2, 1, 3)) {
+		t.Skipf("skipping TestSchemaReset due to CASSANDRA-7910 in Cassandra <2.1.3 version=%v", flagCassVersion)
+	}
+
+	cluster := createCluster()
+	cluster.NumConns = 1
+
+	session := createSessionFromCluster(cluster, t)
+	defer session.Close()
+
+	if err := createTable(session, `CREATE TABLE gocql_test.test_schema_reset (
+		id text PRIMARY KEY)`); err != nil {
+
+		t.Fatal(err)
+	}
+
+	const key = "test"
+
+	err := session.Query("INSERT INTO test_schema_reset(id) VALUES(?)", key).Exec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var id string
+	err = session.Query("SELECT * FROM test_schema_reset WHERE id=?", key).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	} else if id != key {
+		t.Fatalf("expected to get id=%q got=%q", key, id)
+	}
+
+	if err := createTable(session, `ALTER TABLE gocql_test.test_schema_reset ADD val text`); err != nil {
+		t.Fatal(err)
+	}
+
+	const expVal = "test-val"
+	err = session.Query("INSERT INTO test_schema_reset(id, val) VALUES(?, ?)", key, expVal).Exec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var val string
+	err = session.Query("SELECT * FROM test_schema_reset WHERE id=?", key).Scan(&id, &val)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if id != key {
+		t.Errorf("expected to get id=%q got=%q", key, id)
+	}
+	if val != expVal {
+		t.Errorf("expected to get val=%q got=%q", expVal, val)
+	}
+}
+
+func TestCreateSession_DontSwallowError(t *testing.T) {
+	cluster := createCluster()
+	cluster.ProtoVersion = 100
+	session, err := cluster.CreateSession()
+	if err == nil {
+		session.Close()
+
+		t.Fatal("expected to get an error for unsupported protocol")
+	}
+	// TODO: we should get a distinct error type here which include the underlying
+	// cassandra error about the protocol version, for now check this here.
+	if !strings.Contains(err.Error(), "Invalid or unsupported protocol version") {
+		t.Fatalf(`expcted to get error "unsupported protocol version" got: %q`, err)
 	}
 }

@@ -101,6 +101,20 @@ func TestRandomPartitioner(t *testing.T) {
 	}
 }
 
+func TestRandomPartitionerMatchesReference(t *testing.T) {
+	// example taken from datastax python driver
+	//    >>> from cassandra.metadata import MD5Token
+	//    >>> MD5Token.hash_fn("test")
+	//    12707736894140473154801792860916528374L
+	var p randomPartitioner
+	expect := "12707736894140473154801792860916528374"
+	actual := p.Hash([]byte("test")).String()
+	if actual != expect {
+		t.Errorf("expected random partitioner to generate tokens in the same way as the reference"+
+			" python client. Expected %s, but got %s", expect, actual)
+	}
+}
+
 // Tests of the randomToken
 func TestRandomToken(t *testing.T) {
 	if ((*randomToken)(big.NewInt(42))).Less((*randomToken)(big.NewInt(42))) {
@@ -215,22 +229,22 @@ func TestUnknownTokenRing(t *testing.T) {
 // Test of the tokenRing with the Murmur3Partitioner
 func TestMurmur3TokenRing(t *testing.T) {
 	// Note, strings are parsed directly to int64, they are not murmur3 hashed
-	var hosts []HostInfo = []HostInfo{
-		HostInfo{
-			Peer:   "0",
-			Tokens: []string{"0"},
+	hosts := []*HostInfo{
+		{
+			peer:   "0",
+			tokens: []string{"0"},
 		},
-		HostInfo{
-			Peer:   "1",
-			Tokens: []string{"25"},
+		{
+			peer:   "1",
+			tokens: []string{"25"},
 		},
-		HostInfo{
-			Peer:   "2",
-			Tokens: []string{"50"},
+		{
+			peer:   "2",
+			tokens: []string{"50"},
 		},
-		HostInfo{
-			Peer:   "3",
-			Tokens: []string{"75"},
+		{
+			peer:   "3",
+			tokens: []string{"75"},
 		},
 	}
 	ring, err := newTokenRing("Murmur3Partitioner", hosts)
@@ -242,33 +256,33 @@ func TestMurmur3TokenRing(t *testing.T) {
 
 	var actual *HostInfo
 	actual = ring.GetHostForToken(p.ParseString("0"))
-	if actual.Peer != "0" {
-		t.Errorf("Expected peer 0 for token \"0\", but was %s", actual.Peer)
+	if actual.Peer() != "0" {
+		t.Errorf("Expected peer 0 for token \"0\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("25"))
-	if actual.Peer != "1" {
-		t.Errorf("Expected peer 1 for token \"25\", but was %s", actual.Peer)
+	if actual.Peer() != "1" {
+		t.Errorf("Expected peer 1 for token \"25\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("50"))
-	if actual.Peer != "2" {
-		t.Errorf("Expected peer 2 for token \"50\", but was %s", actual.Peer)
+	if actual.Peer() != "2" {
+		t.Errorf("Expected peer 2 for token \"50\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("75"))
-	if actual.Peer != "3" {
-		t.Errorf("Expected peer 3 for token \"01\", but was %s", actual.Peer)
+	if actual.Peer() != "3" {
+		t.Errorf("Expected peer 3 for token \"01\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("12"))
-	if actual.Peer != "1" {
-		t.Errorf("Expected peer 1 for token \"12\", but was %s", actual.Peer)
+	if actual.Peer() != "1" {
+		t.Errorf("Expected peer 1 for token \"12\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("24324545443332"))
-	if actual.Peer != "0" {
-		t.Errorf("Expected peer 0 for token \"24324545443332\", but was %s", actual.Peer)
+	if actual.Peer() != "0" {
+		t.Errorf("Expected peer 0 for token \"24324545443332\", but was %s", actual.Peer())
 	}
 }
 
@@ -276,28 +290,28 @@ func TestMurmur3TokenRing(t *testing.T) {
 func TestOrderedTokenRing(t *testing.T) {
 	// Tokens here more or less are similar layout to the int tokens above due
 	// to each numeric character translating to a consistently offset byte.
-	var hosts []HostInfo = []HostInfo{
-		HostInfo{
-			Peer: "0",
-			Tokens: []string{
+	hosts := []*HostInfo{
+		{
+			peer: "0",
+			tokens: []string{
 				"00",
 			},
 		},
-		HostInfo{
-			Peer: "1",
-			Tokens: []string{
+		{
+			peer: "1",
+			tokens: []string{
 				"25",
 			},
 		},
-		HostInfo{
-			Peer: "2",
-			Tokens: []string{
+		{
+			peer: "2",
+			tokens: []string{
 				"50",
 			},
 		},
-		HostInfo{
-			Peer: "3",
-			Tokens: []string{
+		{
+			peer: "3",
+			tokens: []string{
 				"75",
 			},
 		},
@@ -311,61 +325,61 @@ func TestOrderedTokenRing(t *testing.T) {
 
 	var actual *HostInfo
 	actual = ring.GetHostForToken(p.ParseString("0"))
-	if actual.Peer != "0" {
-		t.Errorf("Expected peer 0 for token \"0\", but was %s", actual.Peer)
+	if actual.Peer() != "0" {
+		t.Errorf("Expected peer 0 for token \"0\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("25"))
-	if actual.Peer != "1" {
-		t.Errorf("Expected peer 1 for token \"25\", but was %s", actual.Peer)
+	if actual.Peer() != "1" {
+		t.Errorf("Expected peer 1 for token \"25\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("50"))
-	if actual.Peer != "2" {
-		t.Errorf("Expected peer 2 for token \"50\", but was %s", actual.Peer)
+	if actual.Peer() != "2" {
+		t.Errorf("Expected peer 2 for token \"50\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("75"))
-	if actual.Peer != "3" {
-		t.Errorf("Expected peer 3 for token \"01\", but was %s", actual.Peer)
+	if actual.Peer() != "3" {
+		t.Errorf("Expected peer 3 for token \"01\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("12"))
-	if actual.Peer != "1" {
-		t.Errorf("Expected peer 1 for token \"12\", but was %s", actual.Peer)
+	if actual.Peer() != "1" {
+		t.Errorf("Expected peer 1 for token \"12\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("24324545443332"))
-	if actual.Peer != "1" {
-		t.Errorf("Expected peer 1 for token \"24324545443332\", but was %s", actual.Peer)
+	if actual.Peer() != "1" {
+		t.Errorf("Expected peer 1 for token \"24324545443332\", but was %s", actual.Peer())
 	}
 }
 
 // Test of the tokenRing with the RandomPartitioner
 func TestRandomTokenRing(t *testing.T) {
 	// String tokens are parsed into big.Int in base 10
-	var hosts []HostInfo = []HostInfo{
-		HostInfo{
-			Peer: "0",
-			Tokens: []string{
+	hosts := []*HostInfo{
+		{
+			peer: "0",
+			tokens: []string{
 				"00",
 			},
 		},
-		HostInfo{
-			Peer: "1",
-			Tokens: []string{
+		{
+			peer: "1",
+			tokens: []string{
 				"25",
 			},
 		},
-		HostInfo{
-			Peer: "2",
-			Tokens: []string{
+		{
+			peer: "2",
+			tokens: []string{
 				"50",
 			},
 		},
-		HostInfo{
-			Peer: "3",
-			Tokens: []string{
+		{
+			peer: "3",
+			tokens: []string{
 				"75",
 			},
 		},
@@ -379,32 +393,32 @@ func TestRandomTokenRing(t *testing.T) {
 
 	var actual *HostInfo
 	actual = ring.GetHostForToken(p.ParseString("0"))
-	if actual.Peer != "0" {
-		t.Errorf("Expected peer 0 for token \"0\", but was %s", actual.Peer)
+	if actual.Peer() != "0" {
+		t.Errorf("Expected peer 0 for token \"0\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("25"))
-	if actual.Peer != "1" {
-		t.Errorf("Expected peer 1 for token \"25\", but was %s", actual.Peer)
+	if actual.Peer() != "1" {
+		t.Errorf("Expected peer 1 for token \"25\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("50"))
-	if actual.Peer != "2" {
-		t.Errorf("Expected peer 2 for token \"50\", but was %s", actual.Peer)
+	if actual.Peer() != "2" {
+		t.Errorf("Expected peer 2 for token \"50\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("75"))
-	if actual.Peer != "3" {
-		t.Errorf("Expected peer 3 for token \"01\", but was %s", actual.Peer)
+	if actual.Peer() != "3" {
+		t.Errorf("Expected peer 3 for token \"01\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("12"))
-	if actual.Peer != "1" {
-		t.Errorf("Expected peer 1 for token \"12\", but was %s", actual.Peer)
+	if actual.Peer() != "1" {
+		t.Errorf("Expected peer 1 for token \"12\", but was %s", actual.Peer())
 	}
 
 	actual = ring.GetHostForToken(p.ParseString("24324545443332"))
-	if actual.Peer != "0" {
-		t.Errorf("Expected peer 0 for token \"24324545443332\", but was %s", actual.Peer)
+	if actual.Peer() != "0" {
+		t.Errorf("Expected peer 0 for token \"24324545443332\", but was %s", actual.Peer())
 	}
 }

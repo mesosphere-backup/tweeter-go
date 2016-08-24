@@ -10,17 +10,18 @@ import (
 func TestSessionAPI(t *testing.T) {
 
 	cfg := &ClusterConfig{}
-	pool, err := cfg.PoolConfig.buildPool(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	s := &Session{
-		pool: pool,
-		cfg:  *cfg,
-		cons: Quorum,
+		cfg:    *cfg,
+		cons:   Quorum,
+		policy: RoundRobinHostPolicy(),
 	}
 
+	s.pool = cfg.PoolConfig.buildPool(s)
+	s.executor = &queryExecutor{
+		pool:   s.pool,
+		policy: s.policy,
+	}
 	defer s.Close()
 
 	s.SetConsistency(All)
@@ -70,7 +71,7 @@ func TestSessionAPI(t *testing.T) {
 
 	testBatch := s.NewBatch(LoggedBatch)
 	testBatch.Query("test")
-	err = s.ExecuteBatch(testBatch)
+	err := s.ExecuteBatch(testBatch)
 
 	if err != ErrNoConnections {
 		t.Fatalf("expected session.ExecuteBatch to return '%v', got '%v'", ErrNoConnections, err)
@@ -160,17 +161,14 @@ func TestQueryShouldPrepare(t *testing.T) {
 func TestBatchBasicAPI(t *testing.T) {
 
 	cfg := &ClusterConfig{RetryPolicy: &SimpleRetryPolicy{NumRetries: 2}}
-	pool, err := cfg.PoolConfig.buildPool(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	s := &Session{
-		pool: pool,
 		cfg:  *cfg,
 		cons: Quorum,
 	}
 	defer s.Close()
+
+	s.pool = cfg.PoolConfig.buildPool(s)
 
 	b := s.NewBatch(UnloggedBatch)
 	if b.Type != UnloggedBatch {

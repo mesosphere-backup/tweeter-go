@@ -15,6 +15,8 @@ import (
 	"gopkg.in/inf.v0"
 )
 
+type AliasInt int
+
 var marshalTests = []struct {
 	Info  TypeInfo
 	Data  []byte
@@ -72,6 +74,11 @@ var marshalTests = []struct {
 		NativeType{proto: 2, typ: TypeInt},
 		[]byte("\x01\x02\x03\x04"),
 		int(16909060),
+	},
+	{
+		NativeType{proto: 2, typ: TypeInt},
+		[]byte("\x01\x02\x03\x04"),
+		AliasInt(16909060),
 	},
 	{
 		NativeType{proto: 2, typ: TypeInt},
@@ -257,8 +264,8 @@ var marshalTests = []struct {
 			NativeType: NativeType{proto: 2, typ: TypeSet},
 			Elem:       NativeType{proto: 2, typ: TypeInt},
 		},
-		[]byte(nil),
-		[]int(nil),
+		[]byte{0, 0}, // encoding of a list should always include the size of the collection
+		[]int{},
 	},
 	{
 		CollectionType{
@@ -275,8 +282,8 @@ var marshalTests = []struct {
 			Key:        NativeType{proto: 2, typ: TypeVarchar},
 			Elem:       NativeType{proto: 2, typ: TypeInt},
 		},
-		[]byte(nil),
-		map[string]int(nil),
+		[]byte{0, 0},
+		map[string]int{},
 	},
 	{
 		CollectionType{
@@ -332,6 +339,11 @@ var marshalTests = []struct {
 		NativeType{proto: 2, typ: TypeVarint},
 		[]byte("f\x1e\xfd\xf2\xe3\xb1\x9f|\x04_\x15"),
 		bigintize("123456789123456789123456789"), // From the datastax/python-driver test suite
+	},
+	{
+		NativeType{proto: 2, typ: TypeVarint},
+		[]byte(nil),
+		nil,
 	},
 	{
 		NativeType{proto: 2, typ: TypeInet},
@@ -540,6 +552,86 @@ var marshalTests = []struct {
 		[]byte(nil),
 		(*CustomString)(nil),
 	},
+	{
+		NativeType{proto: 2, typ: TypeSmallInt},
+		[]byte("\x7f\xff"),
+		32767, // math.MaxInt16
+	},
+	{
+		NativeType{proto: 2, typ: TypeSmallInt},
+		[]byte("\x7f\xff"),
+		"32767", // math.MaxInt16
+	},
+	{
+		NativeType{proto: 2, typ: TypeSmallInt},
+		[]byte("\x00\x01"),
+		int16(1),
+	},
+	{
+		NativeType{proto: 2, typ: TypeSmallInt},
+		[]byte("\xff\xff"),
+		int16(-1),
+	},
+	{
+		NativeType{proto: 2, typ: TypeSmallInt},
+		[]byte("\xff\xff"),
+		uint16(65535),
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\x7f"),
+		127, // math.MaxInt8
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\x7f"),
+		"127", // math.MaxInt8
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\x01"),
+		int16(1),
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\xff"),
+		int16(-1),
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\xff"),
+		uint8(255),
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\xff"),
+		uint64(255),
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\xff"),
+		uint32(255),
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\xff"),
+		uint16(255),
+	},
+	{
+		NativeType{proto: 2, typ: TypeTinyInt},
+		[]byte("\xff"),
+		uint(255),
+	},
+	{
+		NativeType{proto: 2, typ: TypeBigInt},
+		[]byte("\xff\xff\xff\xff\xff\xff\xff\xff"),
+		uint64(math.MaxUint64),
+	},
+	{
+		NativeType{proto: 2, typ: TypeInt},
+		[]byte("\xff\xff\xff\xff"),
+		uint32(math.MaxUint32),
+	},
 }
 
 func decimalize(s string) *inf.Dec {
@@ -552,7 +644,7 @@ func bigintize(s string) *big.Int {
 	return i
 }
 
-func TestMarshal(t *testing.T) {
+func TestMarshal_Encode(t *testing.T) {
 	for i, test := range marshalTests {
 		data, err := Marshal(test.Info, test.Value)
 		if err != nil {
@@ -565,21 +657,21 @@ func TestMarshal(t *testing.T) {
 	}
 }
 
-func TestUnmarshal(t *testing.T) {
+func TestMarshal_Decode(t *testing.T) {
 	for i, test := range marshalTests {
 		if test.Value != nil {
 			v := reflect.New(reflect.TypeOf(test.Value))
 			err := Unmarshal(test.Info, test.Data, v.Interface())
 			if err != nil {
-				t.Errorf("unmarshalTest[%d]: %v", i, err)
+				t.Errorf("unmarshalTest[%d] (%v=>%T): %v", i, test.Info, test.Value, err)
 				continue
 			}
 			if !reflect.DeepEqual(v.Elem().Interface(), test.Value) {
-				t.Errorf("unmarshalTest[%d]: expected %#v, got %#v.", i, test.Value, v.Elem().Interface())
+				t.Errorf("unmarshalTest[%d] (%v=>%T): expected %#v, got %#v.", i, test.Info, test.Value, test.Value, v.Elem().Interface())
 			}
 		} else {
 			if err := Unmarshal(test.Info, test.Data, test.Value); nil == err {
-				t.Errorf("unmarshalTest[%d]: %#v not return error.", i, test.Value)
+				t.Errorf("unmarshalTest[%d] (%v=>%t): %#v not return error.", i, test.Info, test.Value, test.Value)
 			}
 		}
 	}
@@ -668,6 +760,64 @@ func TestMarshalVarint(t *testing.T) {
 			t.Errorf("unmarshaled varint mismatch: expected %v, got %v (test #%d)", test.Unmarshaled, binder, i)
 		}
 	}
+
+	varintUint64Tests := []struct {
+		Value       interface{}
+		Marshaled   []byte
+		Unmarshaled uint64
+	}{
+		{
+			Value:       int8(0),
+			Marshaled:   []byte("\x00"),
+			Unmarshaled: 0,
+		},
+		{
+			Value:       uint8(255),
+			Marshaled:   []byte("\x00\xFF"),
+			Unmarshaled: 255,
+		},
+		{
+			Value:       big.NewInt(math.MaxInt32),
+			Marshaled:   []byte("\x7F\xFF\xFF\xFF"),
+			Unmarshaled: uint64(math.MaxInt32),
+		},
+		{
+			Value:       big.NewInt(int64(math.MaxInt32) + 1),
+			Marshaled:   []byte("\x00\x80\x00\x00\x00"),
+			Unmarshaled: uint64(int64(math.MaxInt32) + 1),
+		},
+		{
+			Value:       uint64(math.MaxInt64) + 1,
+			Marshaled:   []byte("\x00\x80\x00\x00\x00\x00\x00\x00\x00"),
+			Unmarshaled: 9223372036854775808,
+		},
+		{
+			Value:       uint64(math.MaxUint64),
+			Marshaled:   []byte("\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"),
+			Unmarshaled: uint64(math.MaxUint64),
+		},
+	}
+
+	for i, test := range varintUint64Tests {
+		data, err := Marshal(NativeType{proto: 2, typ: TypeVarint}, test.Value)
+		if err != nil {
+			t.Errorf("error marshaling varint: %v (test #%d)", err, i)
+		}
+
+		if !bytes.Equal(test.Marshaled, data) {
+			t.Errorf("marshaled varint mismatch: expected %v, got %v (test #%d)", test.Marshaled, data, i)
+		}
+
+		var binder uint64
+		err = Unmarshal(NativeType{proto: 2, typ: TypeVarint}, test.Marshaled, &binder)
+		if err != nil {
+			t.Errorf("error unmarshaling varint to uint64: %v (test #%d)", err, i)
+		}
+
+		if test.Unmarshaled != binder {
+			t.Errorf("unmarshaled varint mismatch: expected %v, got %v (test #%d)", test.Unmarshaled, binder, i)
+		}
+	}
 }
 
 func equalStringSlice(leftList, rightList []string) bool {
@@ -689,9 +839,9 @@ func TestMarshalList(t *testing.T) {
 	}
 
 	sourceLists := [][]string{
-		[]string{"valueA"},
-		[]string{"valueA", "valueB"},
-		[]string{"valueB"},
+		{"valueA"},
+		{"valueA", "valueB"},
+		{"valueB"},
 	}
 
 	listDatas := [][]byte{}
@@ -761,6 +911,8 @@ var typeLookupTest = []struct {
 	{"ListType", TypeList},
 	{"SetType", TypeSet},
 	{"unknown", TypeCustom},
+	{"ShortType", TypeSmallInt},
+	{"ByteType", TypeTinyInt},
 }
 
 func testType(t *testing.T, cassType string, expectedType Type) {
@@ -895,5 +1047,48 @@ func TestMarshalTuple(t *testing.T) {
 
 	if s1 != "foo" || s2 != "bar" {
 		t.Errorf("unmarshalTest: expected [foo, bar], got [%s, %s]", s1, s2)
+	}
+}
+
+func TestMarshalNil(t *testing.T) {
+	types := []Type{
+		TypeAscii,
+		TypeBlob,
+		TypeBoolean,
+		TypeBigInt,
+		TypeCounter,
+		TypeDecimal,
+		TypeDouble,
+		TypeFloat,
+		TypeInt,
+		TypeTimestamp,
+		TypeUUID,
+		TypeVarchar,
+		TypeVarint,
+		TypeTimeUUID,
+		TypeInet,
+	}
+
+	for _, typ := range types {
+		data, err := Marshal(NativeType{proto: 3, typ: typ}, nil)
+		if err != nil {
+			t.Errorf("unable to marshal nil %v: %v\n", typ, err)
+		} else if data != nil {
+			t.Errorf("expected to get nil byte for nil %v got % X", typ, data)
+		}
+	}
+}
+
+func TestUnmarshalInetCopyBytes(t *testing.T) {
+	data := []byte{127, 0, 0, 1}
+	var ip net.IP
+	if err := unmarshalInet(NativeType{proto: 2, typ: TypeInet}, data, &ip); err != nil {
+		t.Fatal(err)
+	}
+
+	copy(data, []byte{0xFF, 0xFF, 0xFF, 0xFF})
+	ip2 := net.IP(data)
+	if !ip.Equal(net.IPv4(127, 0, 0, 1)) {
+		t.Fatalf("IP memory shared with data: ip=%v ip2=%v", ip, ip2)
 	}
 }

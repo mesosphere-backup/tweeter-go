@@ -170,7 +170,7 @@ func TestTimeUUID(t *testing.T) {
 
 		ts := uuid.Timestamp()
 		if ts < timestamp {
-			t.Errorf("timestamps must grow")
+			t.Errorf("timestamps must grow: timestamp=%v ts=%v", timestamp, ts)
 		}
 		timestamp = ts
 	}
@@ -194,4 +194,25 @@ func TestUnmarshalJSON(t *testing.T) {
 		t.Errorf("no error for invalid JSON UUID")
 	}
 
+}
+
+func TestMarshalText(t *testing.T) {
+	u, err := ParseUUID("486f3a88-775b-11e3-ae07-d231feb1dc81")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	text, err := u.MarshalText()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var u2 UUID
+	if err := u2.UnmarshalText(text); err != nil {
+		t.Fatal(err)
+	}
+
+	if u != u2 {
+		t.Fatalf("uuids not equal after marshalling: before=%s after=%s", u, u2)
+	}
 }

@@ -17,11 +17,26 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"golang.org/x/net/context"
 )
 
 const (
 	defaultProto = protoVersion2
 )
+
+func TestApprove(t *testing.T) {
+	tests := map[bool]bool{
+		approve("org.apache.cassandra.auth.PasswordAuthenticator"):          true,
+		approve("com.instaclustr.cassandra.auth.SharedSecretAuthenticator"): true,
+		approve("com.apache.cassandra.auth.FakeAuthenticator"):              false,
+	}
+	for k, v := range tests {
+		if k != v {
+			t.Fatalf("expected '%v', got '%v'", k, v)
+		}
+	}
+}
 
 func TestJoinHostPort(t *testing.T) {
 	tests := map[string]string{
@@ -37,25 +52,30 @@ func TestJoinHostPort(t *testing.T) {
 	}
 }
 
+func testCluster(addr string, proto protoVersion) *ClusterConfig {
+	cluster := NewCluster(addr)
+	cluster.ProtoVersion = int(proto)
+	cluster.disableControlConn = true
+	return cluster
+}
+
 func TestSimple(t *testing.T) {
-	srv := NewTestServer(t, defaultProto)
+	srv := NewTestServer(t, defaultProto, context.Background())
 	defer srv.Stop()
 
-	cluster := NewCluster(srv.Address)
-	cluster.ProtoVersion = int(defaultProto)
+	cluster := testCluster(srv.Address, defaultProto)
 	db, err := cluster.CreateSession()
 	if err != nil {
-		t.Errorf("0x%x: NewCluster: %v", defaultProto, err)
-		return
+		t.Fatalf("0x%x: NewCluster: %v", defaultProto, err)
 	}
 
 	if err := db.Query("void").Exec(); err != nil {
-		t.Errorf("0x%x: %v", defaultProto, err)
+		t.Fatalf("0x%x: %v", defaultProto, err)
 	}
 }
 
 func TestSSLSimple(t *testing.T) {
-	srv := NewSSLTestServer(t, defaultProto)
+	srv := NewSSLTestServer(t, defaultProto, context.Background())
 	defer srv.Stop()
 
 	db, err := createTestSslCluster(srv.Address, defaultProto, true).CreateSession()
@@ -69,7 +89,7 @@ func TestSSLSimple(t *testing.T) {
 }
 
 func TestSSLSimpleNoClientCert(t *testing.T) {
-	srv := NewSSLTestServer(t, defaultProto)
+	srv := NewSSLTestServer(t, defaultProto, context.Background())
 	defer srv.Stop()
 
 	db, err := createTestSslCluster(srv.Address, defaultProto, false).CreateSession()
@@ -82,75 +102,84 @@ func TestSSLSimpleNoClientCert(t *testing.T) {
 	}
 }
 
-func createTestSslCluster(hosts string, proto uint8, useClientCert bool) *ClusterConfig {
-	cluster := NewCluster(hosts)
+func createTestSslCluster(addr string, proto protoVersion, useClientCert bool) *ClusterConfig {
+	cluster := testCluster(addr, proto)
 	sslOpts := &SslOptions{
 		CaPath:                 "testdata/pki/ca.crt",
 		EnableHostVerification: false,
 	}
+
 	if useClientCert {
 		sslOpts.CertPath = "testdata/pki/gocql.crt"
 		sslOpts.KeyPath = "testdata/pki/gocql.key"
 	}
+
 	cluster.SslOpts = sslOpts
-	cluster.ProtoVersion = int(proto)
 	return cluster
 }
 
 func TestClosed(t *testing.T) {
 	t.Skip("Skipping the execution of TestClosed for now to try to concentrate on more important test failures on Travis")
 
-	srv := NewTestServer(t, defaultProto)
+	srv := NewTestServer(t, defaultProto, context.Background())
 	defer srv.Stop()
 
-	cluster := NewCluster(srv.Address)
-	cluster.ProtoVersion = int(defaultProto)
-
-	session, err := cluster.CreateSession()
-	defer session.Close()
+	session, err := newTestSession(srv.Address, defaultProto)
 	if err != nil {
-		t.Errorf("0x%x: NewCluster: %v", defaultProto, err)
-		return
+		t.Fatalf("0x%x: NewCluster: %v", defaultProto, err)
 	}
 
+	session.Close()
+
 	if err := session.Query("void").Exec(); err != ErrSessionClosed {
-		t.Errorf("0x%x: expected %#v, got %#v", defaultProto, ErrSessionClosed, err)
-		return
+		t.Fatalf("0x%x: expected %#v, got %#v", defaultProto, ErrSessionClosed, err)
 	}
 }
 
-func newTestSession(addr string, proto uint8) (*Session, error) {
-	cluster := NewCluster(addr)
-	cluster.ProtoVersion = int(proto)
-	return cluster.CreateSession()
+func newTestSession(addr string, proto protoVersion) (*Session, error) {
+	return testCluster(addr, proto).CreateSession()
 }
 
 func TestTimeout(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
 
-	srv := NewTestServer(t, defaultProto)
+	srv := NewTestServer(t, defaultProto, ctx)
 	defer srv.Stop()
 
 	db, err := newTestSession(srv.Address, defaultProto)
 	if err != nil {
-		t.Errorf("NewCluster: %v", err)
-		return
+		t.Fatalf("NewCluster: %v", err)
 	}
 	defer db.Close()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	go func() {
-		<-time.After(2 * time.Second)
-		t.Errorf("no timeout")
+		defer wg.Done()
+
+		select {
+		case <-time.After(5 * time.Second):
+			t.Errorf("no timeout")
+		case <-ctx.Done():
+		}
 	}()
 
-	if err := db.Query("kill").Exec(); err == nil {
-		t.Errorf("expected error")
+	if err := db.Query("kill").WithContext(ctx).Exec(); err == nil {
+		t.Fatal("expected error got nil")
 	}
+	cancel()
+
+	wg.Wait()
 }
 
 // TestQueryRetry will test to make sure that gocql will execute
 // the exact amount of retry queries designated by the user.
 func TestQueryRetry(t *testing.T) {
-	srv := NewTestServer(t, defaultProto)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := NewTestServer(t, defaultProto, ctx)
 	defer srv.Stop()
 
 	db, err := newTestSession(srv.Address, defaultProto)
@@ -160,9 +189,14 @@ func TestQueryRetry(t *testing.T) {
 	defer db.Close()
 
 	go func() {
-		<-time.After(5 * time.Second)
-		t.Fatalf("no timeout")
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+			t.Errorf("no timeout")
+		}
 	}()
+
 	rt := &SimpleRetryPolicy{NumRetries: 1}
 
 	qry := db.Query("kill").RetryPolicy(rt)
@@ -176,53 +210,19 @@ func TestQueryRetry(t *testing.T) {
 		t.Fatalf("expected requests %v to match query attemps %v", requests, attempts)
 	}
 
-	//Minus 1 from the requests variable since there is the initial query attempt
-	if requests-1 != int64(rt.NumRetries) {
+	// the query will only be attempted once, but is being retried
+	if requests != int64(rt.NumRetries) {
 		t.Fatalf("failed to retry the query %v time(s). Query executed %v times", rt.NumRetries, requests-1)
 	}
 }
 
-func TestConnClosing(t *testing.T) {
-	t.Skip("Skipping until test can be ran reliably")
-
-	srv := NewTestServer(t, protoVersion2)
-	defer srv.Stop()
-
-	db, err := NewCluster(srv.Address).CreateSession()
-	if err != nil {
-		t.Errorf("NewCluster: %v", err)
-	}
-	defer db.Close()
-
-	numConns := db.cfg.NumConns
-	count := db.cfg.NumStreams * numConns
-
-	wg := &sync.WaitGroup{}
-	wg.Add(count)
-	for i := 0; i < count; i++ {
-		go func(wg *sync.WaitGroup) {
-			wg.Done()
-			db.Query("kill").Exec()
-		}(wg)
-	}
-
-	wg.Wait()
-
-	time.Sleep(1 * time.Second) //Sleep so the fillPool can complete.
-	conns := db.pool.Size()
-
-	if conns != numConns {
-		t.Errorf("Expected to have %d connections but have %d", numConns, conns)
-	}
-}
-
 func TestStreams_Protocol1(t *testing.T) {
-	srv := NewTestServer(t, protoVersion1)
+	srv := NewTestServer(t, protoVersion1, context.Background())
 	defer srv.Stop()
 
 	// TODO: these are more like session tests and should instead operate
 	// on a single Conn
-	cluster := NewCluster(srv.Address)
+	cluster := testCluster(srv.Address, protoVersion1)
 	cluster.NumConns = 1
 	cluster.ProtoVersion = 1
 
@@ -233,7 +233,7 @@ func TestStreams_Protocol1(t *testing.T) {
 	defer db.Close()
 
 	var wg sync.WaitGroup
-	for i := 1; i < db.cfg.NumStreams; i++ {
+	for i := 1; i < 128; i++ {
 		// here were just validating that if we send NumStream request we get
 		// a response for every stream and the lengths for the queries are set
 		// correctly.
@@ -248,40 +248,13 @@ func TestStreams_Protocol1(t *testing.T) {
 	wg.Wait()
 }
 
-func TestStreams_Protocol2(t *testing.T) {
-	srv := NewTestServer(t, protoVersion2)
-	defer srv.Stop()
-
-	// TODO: these are more like session tests and should instead operate
-	// on a single Conn
-	cluster := NewCluster(srv.Address)
-	cluster.NumConns = 1
-	cluster.ProtoVersion = 2
-
-	db, err := cluster.CreateSession()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	for i := 1; i < db.cfg.NumStreams; i++ {
-		// the test server processes each conn synchronously
-		// here were just validating that if we send NumStream request we get
-		// a response for every stream and the lengths for the queries are set
-		// correctly.
-		if err = db.Query("void").Exec(); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
 func TestStreams_Protocol3(t *testing.T) {
-	srv := NewTestServer(t, protoVersion3)
+	srv := NewTestServer(t, protoVersion3, context.Background())
 	defer srv.Stop()
 
 	// TODO: these are more like session tests and should instead operate
 	// on a single Conn
-	cluster := NewCluster(srv.Address)
+	cluster := testCluster(srv.Address, protoVersion3)
 	cluster.NumConns = 1
 	cluster.ProtoVersion = 3
 
@@ -291,7 +264,7 @@ func TestStreams_Protocol3(t *testing.T) {
 	}
 	defer db.Close()
 
-	for i := 1; i < db.cfg.NumStreams; i++ {
+	for i := 1; i < 32768; i++ {
 		// the test server processes each conn synchronously
 		// here were just validating that if we send NumStream request we get
 		// a response for every stream and the lengths for the queries are set
@@ -303,7 +276,7 @@ func TestStreams_Protocol3(t *testing.T) {
 }
 
 func BenchmarkProtocolV3(b *testing.B) {
-	srv := NewTestServer(b, protoVersion3)
+	srv := NewTestServer(b, protoVersion3, context.Background())
 	defer srv.Stop()
 
 	// TODO: these are more like session tests and should instead operate
@@ -327,82 +300,13 @@ func BenchmarkProtocolV3(b *testing.B) {
 	}
 }
 
-func TestRoundRobinConnPoolRoundRobin(t *testing.T) {
-	// create 5 test servers
-	servers := make([]*TestServer, 5)
-	addrs := make([]string, len(servers))
-	for n := 0; n < len(servers); n++ {
-		servers[n] = NewTestServer(t, defaultProto)
-		addrs[n] = servers[n].Address
-		defer servers[n].Stop()
-	}
-
-	// create a new cluster using the policy-based round robin conn pool
-	cluster := NewCluster(addrs...)
-	cluster.PoolConfig.HostSelectionPolicy = RoundRobinHostPolicy()
-	cluster.PoolConfig.ConnSelectionPolicy = RoundRobinConnPolicy()
-	cluster.disableControlConn = true
-
-	db, err := cluster.CreateSession()
-	if err != nil {
-		t.Fatalf("failed to create a new session: %v", err)
-	}
-
-	// Sleep to allow the pool to fill
-	time.Sleep(100 * time.Millisecond)
-
-	// run concurrent queries against the pool, server usage should
-	// be even
-	var wg sync.WaitGroup
-	wg.Add(5)
-	for n := 0; n < 5; n++ {
-		go func() {
-			for j := 0; j < 5; j++ {
-				if err := db.Query("void").Exec(); err != nil {
-					t.Errorf("Query failed with error: %v", err)
-				}
-			}
-			wg.Done()
-		}()
-	}
-	wg.Wait()
-
-	db.Close()
-
-	// wait for the pool to drain
-	time.Sleep(100 * time.Millisecond)
-	size := db.pool.Size()
-	if size != 0 {
-		t.Errorf("connection pool did not drain, still contains %d connections", size)
-	}
-
-	// verify that server usage is even
-	diff := 0
-	for n := 1; n < len(servers); n++ {
-		d := 0
-		if servers[n].nreq > servers[n-1].nreq {
-			d = int(servers[n].nreq - servers[n-1].nreq)
-		} else {
-			d = int(servers[n-1].nreq - servers[n].nreq)
-		}
-		if d > diff {
-			diff = d
-		}
-	}
-
-	if diff > 0 {
-		t.Errorf("expected 0 difference in usage but was %d", diff)
-	}
-}
-
 // This tests that the policy connection pool handles SSL correctly
 func TestPolicyConnPoolSSL(t *testing.T) {
-	srv := NewSSLTestServer(t, defaultProto)
+	srv := NewSSLTestServer(t, defaultProto, context.Background())
 	defer srv.Stop()
 
 	cluster := createTestSslCluster(srv.Address, defaultProto, true)
 	cluster.PoolConfig.HostSelectionPolicy = RoundRobinHostPolicy()
-	cluster.PoolConfig.ConnSelectionPolicy = RoundRobinConnPolicy()
 
 	db, err := cluster.CreateSession()
 	if err != nil {
@@ -410,31 +314,30 @@ func TestPolicyConnPoolSSL(t *testing.T) {
 	}
 
 	if err := db.Query("void").Exec(); err != nil {
-		t.Errorf("query failed due to error: %v", err)
+		t.Fatalf("query failed due to error: %v", err)
 	}
-
 	db.Close()
 
 	// wait for the pool to drain
 	time.Sleep(100 * time.Millisecond)
 	size := db.pool.Size()
 	if size != 0 {
-		t.Errorf("connection pool did not drain, still contains %d connections", size)
+		t.Fatalf("connection pool did not drain, still contains %d connections", size)
 	}
 }
 
 func TestQueryTimeout(t *testing.T) {
-	srv := NewTestServer(t, defaultProto)
+	srv := NewTestServer(t, defaultProto, context.Background())
 	defer srv.Stop()
 
-	cluster := NewCluster(srv.Address)
+	cluster := testCluster(srv.Address, defaultProto)
 	// Set the timeout arbitrarily low so that the query hits the timeout in a
 	// timely manner.
 	cluster.Timeout = 1 * time.Millisecond
 
 	db, err := cluster.CreateSession()
 	if err != nil {
-		t.Errorf("NewCluster: %v", err)
+		t.Fatalf("NewCluster: %v", err)
 	}
 	defer db.Close()
 
@@ -460,16 +363,46 @@ func TestQueryTimeout(t *testing.T) {
 	}
 }
 
-func TestQueryTimeoutReuseStream(t *testing.T) {
-	srv := NewTestServer(t, defaultProto)
+func BenchmarkSingleConn(b *testing.B) {
+	srv := NewTestServer(b, 3, context.Background())
 	defer srv.Stop()
 
-	cluster := NewCluster(srv.Address)
+	cluster := testCluster(srv.Address, 3)
+	// Set the timeout arbitrarily low so that the query hits the timeout in a
+	// timely manner.
+	cluster.Timeout = 500 * time.Millisecond
+	cluster.NumConns = 1
+	db, err := cluster.CreateSession()
+	if err != nil {
+		b.Fatalf("NewCluster: %v", err)
+	}
+	defer db.Close()
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			err := db.Query("void").Exec()
+			if err != nil {
+				b.Error(err)
+				return
+			}
+		}
+	})
+}
+
+func TestQueryTimeoutReuseStream(t *testing.T) {
+	t.Skip("no longer tests anything")
+	// TODO(zariel): move this to conn test, we really just want to check what
+	// happens when a conn is
+
+	srv := NewTestServer(t, defaultProto, context.Background())
+	defer srv.Stop()
+
+	cluster := testCluster(srv.Address, defaultProto)
 	// Set the timeout arbitrarily low so that the query hits the timeout in a
 	// timely manner.
 	cluster.Timeout = 1 * time.Millisecond
 	cluster.NumConns = 1
-	cluster.NumStreams = 1
 
 	db, err := cluster.CreateSession()
 	if err != nil {
@@ -486,15 +419,14 @@ func TestQueryTimeoutReuseStream(t *testing.T) {
 }
 
 func TestQueryTimeoutClose(t *testing.T) {
-	srv := NewTestServer(t, defaultProto)
+	srv := NewTestServer(t, defaultProto, context.Background())
 	defer srv.Stop()
 
-	cluster := NewCluster(srv.Address)
+	cluster := testCluster(srv.Address, defaultProto)
 	// Set the timeout arbitrarily low so that the query hits the timeout in a
 	// timely manner.
 	cluster.Timeout = 1000 * time.Millisecond
 	cluster.NumConns = 1
-	cluster.NumStreams = 1
 
 	db, err := cluster.CreateSession()
 	if err != nil {
@@ -521,55 +453,100 @@ func TestQueryTimeoutClose(t *testing.T) {
 	}
 }
 
-func TestExecPanic(t *testing.T) {
-	t.Skip("test can cause unrelated failures, skipping until it can be fixed.")
-	srv := NewTestServer(t, defaultProto)
+func TestStream0(t *testing.T) {
+	const expErr = "gocql: received frame on stream 0"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := NewTestServer(t, defaultProto, ctx)
 	defer srv.Stop()
 
-	cluster := NewCluster(srv.Address)
-	// Set the timeout arbitrarily low so that the query hits the timeout in a
-	// timely manner.
-	cluster.Timeout = 5 * time.Millisecond
-	cluster.NumConns = 1
-	// cluster.NumStreams = 1
+	errorHandler := connErrorHandlerFn(func(conn *Conn, err error, closed bool) {
+		if !srv.isClosed() && !strings.HasPrefix(err.Error(), expErr) {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				t.Errorf("expected to get error prefix %q got %q", expErr, err.Error())
+			}
+		}
+	})
 
+	host := &HostInfo{peer: srv.Address}
+	conn, err := Connect(host, srv.Address, &ConnConfig{ProtoVersion: int(srv.protocol)}, errorHandler, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writer := frameWriterFunc(func(f *framer, streamID int) error {
+		f.writeQueryFrame(0, "void", &queryParams{})
+		return f.finishWrite()
+	})
+
+	// need to write out an invalid frame, which we need a connection to do
+	framer, err := conn.exec(ctx, writer, nil)
+	if err == nil {
+		t.Fatal("expected to get an error on stream 0")
+	} else if !strings.HasPrefix(err.Error(), expErr) {
+		t.Fatalf("expected to get error prefix %q got %q", expErr, err.Error())
+	} else if framer != nil {
+		frame, err := framer.parseFrame()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Fatalf("got frame %v", frame)
+	}
+}
+
+func TestConnClosedBlocked(t *testing.T) {
+	// issue 664
+	const proto = 3
+
+	srv := NewTestServer(t, proto, context.Background())
+	defer srv.Stop()
+	errorHandler := connErrorHandlerFn(func(conn *Conn, err error, closed bool) {
+		t.Log(err)
+	})
+
+	host := &HostInfo{peer: srv.Address}
+	conn, err := Connect(host, srv.Address, &ConnConfig{ProtoVersion: int(srv.protocol)}, errorHandler, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := conn.conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// This will block indefintaly if #664 is not fixed
+	err = conn.executeQuery(&Query{stmt: "void"}).Close()
+	if !strings.HasSuffix(err.Error(), "use of closed network connection") {
+		t.Fatalf("expected to get use of closed networking connection error got: %v\n", err)
+	}
+}
+
+func TestContext_Timeout(t *testing.T) {
+	srv := NewTestServer(t, defaultProto, context.Background())
+	defer srv.Stop()
+
+	cluster := testCluster(srv.Address, defaultProto)
+	cluster.Timeout = 5 * time.Second
 	db, err := cluster.CreateSession()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 
-	streams := db.cfg.NumStreams
-
-	wg := &sync.WaitGroup{}
-	wg.Add(streams)
-	for i := 0; i < streams; i++ {
-		go func() {
-			defer wg.Done()
-			q := db.Query("void")
-			for {
-				if err := q.Exec(); err != nil {
-					return
-				}
-			}
-		}()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = db.Query("timeout").WithContext(ctx).Exec()
+	if err != context.Canceled {
+		t.Fatalf("expected to get context cancel error: %v got %v", context.Canceled, err)
 	}
-
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		for i := 0; i < int(TimeoutLimit); i++ {
-			db.Query("timeout").Exec()
-		}
-	}()
-
-	wg.Wait()
-
-	time.Sleep(500 * time.Millisecond)
 }
 
-func NewTestServer(t testing.TB, protocol uint8) *TestServer {
+func NewTestServer(t testing.TB, protocol uint8, ctx context.Context) *TestServer {
 	laddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -585,29 +562,32 @@ func NewTestServer(t testing.TB, protocol uint8) *TestServer {
 		headerSize = 9
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	srv := &TestServer{
 		Address:    listen.Addr().String(),
 		listen:     listen,
 		t:          t,
 		protocol:   protocol,
 		headerSize: headerSize,
-		quit:       make(chan struct{}),
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 
+	go srv.closeWatch()
 	go srv.serve()
 
 	return srv
 }
 
-func NewSSLTestServer(t testing.TB, protocol uint8) *TestServer {
+func NewSSLTestServer(t testing.TB, protocol uint8, ctx context.Context) *TestServer {
 	pem, err := ioutil.ReadFile("testdata/pki/ca.crt")
 	certPool := x509.NewCertPool()
 	if !certPool.AppendCertsFromPEM(pem) {
-		t.Errorf("Failed parsing or appending certs")
+		t.Fatalf("Failed parsing or appending certs")
 	}
 	mycert, err := tls.LoadX509KeyPair("testdata/pki/cassandra.crt", "testdata/pki/cassandra.key")
 	if err != nil {
-		t.Errorf("could not load cert")
+		t.Fatalf("could not load cert")
 	}
 	config := &tls.Config{
 		Certificates: []tls.Certificate{mycert},
@@ -623,14 +603,18 @@ func NewSSLTestServer(t testing.TB, protocol uint8) *TestServer {
 		headerSize = 9
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	srv := &TestServer{
 		Address:    listen.Addr().String(),
 		listen:     listen,
 		t:          t,
 		protocol:   protocol,
 		headerSize: headerSize,
-		quit:       make(chan struct{}),
+		ctx:        ctx,
+		cancel:     cancel,
 	}
+
+	go srv.closeWatch()
 	go srv.serve()
 	return srv
 }
@@ -645,24 +629,56 @@ type TestServer struct {
 
 	protocol   byte
 	headerSize int
+	ctx        context.Context
+	cancel     context.CancelFunc
 
-	quit chan struct{}
+	quit   chan struct{}
+	mu     sync.Mutex
+	closed bool
+}
+
+func (srv *TestServer) closeWatch() {
+	<-srv.ctx.Done()
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+
+	srv.closeLocked()
 }
 
 func (srv *TestServer) serve() {
 	defer srv.listen.Close()
 	for {
+		select {
+		case <-srv.ctx.Done():
+			return
+		default:
+		}
+
 		conn, err := srv.listen.Accept()
 		if err != nil {
 			break
 		}
+
 		go func(conn net.Conn) {
 			defer conn.Close()
 			for {
+				select {
+				case <-srv.ctx.Done():
+					return
+				default:
+				}
+
 				framer, err := srv.readFrame(conn)
 				if err != nil {
 					if err == io.EOF {
 						return
+					}
+
+					select {
+					case <-srv.ctx.Done():
+						return
+					default:
 					}
 
 					srv.t.Error(err)
@@ -677,14 +693,38 @@ func (srv *TestServer) serve() {
 	}
 }
 
-func (srv *TestServer) Stop() {
+func (srv *TestServer) isClosed() bool {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	return srv.closed
+}
+
+func (srv *TestServer) closeLocked() {
+	if srv.closed {
+		return
+	}
+
+	srv.closed = true
+
 	srv.listen.Close()
-	close(srv.quit)
+	srv.cancel()
+}
+
+func (srv *TestServer) Stop() {
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	srv.closeLocked()
 }
 
 func (srv *TestServer) process(f *framer) {
 	head := f.header
 	if head == nil {
+		select {
+		case <-srv.ctx.Done():
+			return
+		default:
+		}
+
 		srv.t.Error("process frame with a nil header")
 		return
 	}
@@ -714,7 +754,7 @@ func (srv *TestServer) process(f *framer) {
 			f.writeHeader(0, opResult, head.stream)
 			f.writeInt(resultKindVoid)
 		case "timeout":
-			<-srv.quit
+			<-srv.ctx.Done()
 			return
 		case "slow":
 			go func() {
@@ -722,7 +762,8 @@ func (srv *TestServer) process(f *framer) {
 				f.writeInt(resultKindVoid)
 				f.wbuf[0] = srv.protocol | 0x80
 				select {
-				case <-srv.quit:
+				case <-srv.ctx.Done():
+					return
 				case <-time.After(50 * time.Millisecond):
 					f.finishWrite()
 				}
@@ -732,6 +773,9 @@ func (srv *TestServer) process(f *framer) {
 			f.writeHeader(0, opResult, head.stream)
 			f.writeInt(resultKindVoid)
 		}
+	case opError:
+		f.writeHeader(0, opError, head.stream)
+		f.wbuf = append(f.wbuf, f.rbuf...)
 	default:
 		f.writeHeader(0, opError, head.stream)
 		f.writeInt(0)
@@ -741,6 +785,12 @@ func (srv *TestServer) process(f *framer) {
 	f.wbuf[0] = srv.protocol | 0x80
 
 	if err := f.finishWrite(); err != nil {
+		select {
+		case <-srv.ctx.Done():
+			return
+		default:
+		}
+
 		srv.t.Error(err)
 	}
 }

@@ -339,5 +339,206 @@ func TestMapScanUDT(t *testing.T) {
 			t.Errorf("message was not string got: %T", message)
 		}
 	}
+}
 
+func TestUDT_MissingField(t *testing.T) {
+	if *flagProto < protoVersion3 {
+		t.Skip("UDT are only available on protocol >= 3")
+	}
+
+	session := createSession(t)
+	defer session.Close()
+
+	err := createTable(session, `CREATE TYPE gocql_test.missing_field(
+		name text,
+		owner text);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = createTable(session, `CREATE TABLE gocql_test.missing_field(
+		id uuid,
+		udt_col frozen<udt_null_type>,
+
+		primary key(id)
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type col struct {
+		Name string `cql:"name"`
+	}
+
+	writeCol := &col{
+		Name: "test",
+	}
+
+	id := TimeUUID()
+	err = session.Query("INSERT INTO missing_field(id, udt_col) VALUES(?, ?)", id, writeCol).Exec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	readCol := &col{}
+	err = session.Query("SELECT udt_col FROM missing_field WHERE id = ?", id).Scan(readCol)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if readCol.Name != writeCol.Name {
+		t.Errorf("expected %q: got %q", writeCol.Name, readCol.Name)
+	}
+}
+
+func TestUDT_EmptyCollections(t *testing.T) {
+	if *flagProto < protoVersion3 {
+		t.Skip("UDT are only available on protocol >= 3")
+	}
+
+	session := createSession(t)
+	defer session.Close()
+
+	err := createTable(session, `CREATE TYPE gocql_test.nil_collections(
+		a list<text>,
+		b map<text, text>,
+		c set<text>
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = createTable(session, `CREATE TABLE gocql_test.nil_collections(
+		id uuid,
+		udt_col frozen<nil_collections>,
+
+		primary key(id)
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type udt struct {
+		A []string          `cql:"a"`
+		B map[string]string `cql:"b"`
+		C []string          `cql:"c"`
+	}
+
+	id := TimeUUID()
+	err = session.Query("INSERT INTO nil_collections(id, udt_col) VALUES(?, ?)", id, &udt{}).Exec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var val udt
+	err = session.Query("SELECT udt_col FROM nil_collections WHERE id=?", id).Scan(&val)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if val.A != nil {
+		t.Errorf("expected to get nil got %#+v", val.A)
+	}
+	if val.B != nil {
+		t.Errorf("expected to get nil got %#+v", val.B)
+	}
+	if val.C != nil {
+		t.Errorf("expected to get nil got %#+v", val.C)
+	}
+}
+
+func TestUDT_UpdateField(t *testing.T) {
+	if *flagProto < protoVersion3 {
+		t.Skip("UDT are only available on protocol >= 3")
+	}
+
+	session := createSession(t)
+	defer session.Close()
+
+	err := createTable(session, `CREATE TYPE gocql_test.update_field_udt(
+		name text,
+		owner text);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = createTable(session, `CREATE TABLE gocql_test.update_field(
+		id uuid,
+		udt_col frozen<update_field_udt>,
+
+		primary key(id)
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type col struct {
+		Name  string `cql:"name"`
+		Owner string `cql:"owner"`
+		Data  string `cql:"data"`
+	}
+
+	writeCol := &col{
+		Name:  "test-name",
+		Owner: "test-owner",
+	}
+
+	id := TimeUUID()
+	err = session.Query("INSERT INTO update_field(id, udt_col) VALUES(?, ?)", id, writeCol).Exec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := createTable(session, `ALTER TYPE gocql_test.update_field_udt ADD data text;`); err != nil {
+		t.Fatal(err)
+	}
+
+	readCol := &col{}
+	err = session.Query("SELECT udt_col FROM update_field WHERE id = ?", id).Scan(readCol)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if *readCol != *writeCol {
+		t.Errorf("expected %+v: got %+v", *writeCol, *readCol)
+	}
+}
+
+func TestUDT_ScanNullUDT(t *testing.T) {
+	if *flagProto < protoVersion3 {
+		t.Skip("UDT are only available on protocol >= 3")
+	}
+
+	session := createSession(t)
+	defer session.Close()
+
+	err := createTable(session, `CREATE TYPE gocql_test.scan_null_udt_position(
+		lat int,
+		lon int,
+		padding text);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = createTable(session, `CREATE TABLE gocql_test.scan_null_udt_houses(
+		id int,
+		name text,
+		loc frozen<position>,
+		primary key(id)
+	);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = session.Query("INSERT INTO scan_null_udt_houses(id, name) VALUES(?, ?)", 1, "test" ).Exec()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pos := &position{}
+
+	err = session.Query("SELECT loc FROM scan_null_udt_houses WHERE id = ?", 1).Scan(pos)
+	if err != nil {
+		t.Fatal(err)
+	}
 }

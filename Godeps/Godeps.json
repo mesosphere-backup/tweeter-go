@@ -1,6 +1,6 @@
 {
 	"ImportPath": "github.com/mesosphere/oinker-go",
-	"GoVersion": "go1.5.1",
+	"GoVersion": "go1.6.2",
 	"Deps": [
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
@@ -33,12 +33,16 @@
 		},
 		{
 			"ImportPath": "github.com/gocql/gocql",
-			"Comment": "1st_gen_framing-323-g8041a37",
-			"Rev": "8041a37b40f2ca115d6c2902b279250eb627d7af"
+			"Comment": "pre-node-events-355-g7b3e849",
+			"Rev": "7b3e8491096b1d0fcb14e29b3055db415a03c430"
 		},
 		{
 			"ImportPath": "github.com/golang/snappy",
 			"Rev": "723cc1e459b8eea2dea4583200fd60757d40097a"
+		},
+		{
+			"ImportPath": "github.com/hailocab/go-hostpool",
+			"Rev": "e80d13ce29ede4452c43dea11e79b9bc8a15b478"
 		},
 		{
 			"ImportPath": "github.com/karlkfi/inject",
@@ -47,6 +51,10 @@
 		{
 			"ImportPath": "github.com/satori/go.uuid",
 			"Rev": "08f0718b61e95ddba0ade3346725fe0e4bf28ca6"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "7394c112eae4dba7e96bfcfe738e6373d61772b4"
 		},
 		{
 			"ImportPath": "gopkg.in/inf.v0",

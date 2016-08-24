@@ -48,12 +48,13 @@ func TestFuzzBugs(t *testing.T) {
 			continue
 		}
 
-		_, err = framer.parseFrame()
+		frame, err := framer.parseFrame()
 		if err != nil {
 			continue
 		}
 
-		t.Errorf("(%d) expected to fail for input %q", i, test)
+		t.Errorf("(%d) expected to fail for input % X", i, test)
+		t.Errorf("(%d) frame=%+#v", i, frame)
 	}
 }
 
@@ -94,5 +95,12 @@ func TestFrameReadTooLong(t *testing.T) {
 	}
 	if head.op != opReady {
 		t.Fatalf("expected to get header %v got %v", opReady, head.op)
+	}
+}
+
+func TestParseConsistencyErrorInsteadOfPanic(t *testing.T) {
+	_, err := ParseConsistencyWrapper("TEST")
+	if err == nil {
+		t.Fatal("expected ParseConsistencyWrapper error got nil")
 	}
 }
