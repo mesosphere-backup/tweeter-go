@@ -9,6 +9,7 @@ import (
 
 	"net/http"
 	"os"
+	"time"
 )
 
 type Oinker struct {
@@ -33,7 +34,7 @@ func (o *Oinker) NewGraph() inject.Graph {
 
 	var cqlCluster *gocql.ClusterConfig
 	graph.Define(&cqlCluster, inject.NewProvider(func() *gocql.ClusterConfig {
-		return gocql.NewCluster(o.CQLHosts...)
+		return NewCQLCluster(o.CQLHosts...)
 	}))
 
 	var cqlSession *service.CQLSession
@@ -59,4 +60,24 @@ func (o *Oinker) NewGraph() inject.Graph {
 	graph.Define(&oinkController, inject.NewProvider(controller.NewOinkController, &oinkRepo))
 
 	return graph
+}
+
+// NewCQLCluster generates a new GoSQL config for Cassandra 3, which uses Proto 3
+func NewCQLCluster(hosts ...string) *gocql.ClusterConfig {
+	cfg := &gocql.ClusterConfig{
+		Hosts:                  hosts,
+		CQLVersion:             "3.0.0",
+		ProtoVersion:           3,
+		Timeout:                600 * time.Millisecond,
+		Port:                   9042,
+		NumConns:               2,
+		Consistency:            gocql.Quorum,
+		MaxPreparedStmts:       1000,
+		MaxRoutingKeyInfo:      1000,
+		PageSize:               5000,
+		DefaultTimestamp:       true,
+		MaxWaitSchemaAgreement: 60 * time.Second,
+		ReconnectInterval:      60 * time.Second,
+	}
+	return cfg
 }
