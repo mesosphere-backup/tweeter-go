@@ -8,6 +8,11 @@
 			"Rev": "0f2a4955b11372eec5a4b95d907eaf8379b835d0"
 		},
 		{
+			"ImportPath": "github.com/cenkalti/backoff",
+			"Comment": "v1.0.0-15-gb02f2bb",
+			"Rev": "b02f2bbce11d7ea6b97f282ef1771b0fe2f65ef3"
+		},
+		{
 			"ImportPath": "github.com/dustin/go-humanize",
 			"Rev": "c20a8bde38c8f5ba06f6600edf473705c96829d1"
 		},
