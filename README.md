@@ -26,13 +26,9 @@ make
 Build a docker image:
 
 ```
-make image
-```
-
-Build build-image (req'd for `make image`):
-
-```
+# make the build image first
 make build-image
+make image
 ```
 
 

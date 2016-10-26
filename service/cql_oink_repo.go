@@ -6,11 +6,13 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/satori/go.uuid"
 	log "github.com/Sirupsen/logrus"
+	"github.com/cenkalti/backoff"
 
 	"time"
 	"fmt"
 	"errors"
 	"sync"
+	"os"
 )
 
 type CQLOinkRepo struct {
@@ -50,7 +52,17 @@ func (r *CQLOinkRepo) Initialize() {
 		return
 	}
 
-	log.Infof("Creating keyspace oinker (replication_factor: %d)", r.replicationFactor)
+	err := backoff.Retry(r.initializeAttempt, backoff.NewExponentialBackOff())
+	if err != nil {
+		log.Errorf("Initializing CQLOinkRepo: %s", err)
+		os.Exit(1)
+	}
+
+	r.initialized = true
+}
+
+func (r *CQLOinkRepo) initializeAttempt() error {
+	log.Infof("Attempting to create keyspace oinker (replication_factor: %d)", r.replicationFactor)
 
 	err := r.session.Query(
 		fmt.Sprintf(
@@ -59,11 +71,11 @@ func (r *CQLOinkRepo) Initialize() {
 		),
 	).Exec()
 	if err != nil {
-		log.Errorf("Creating keyspace (oinker): %s", err)
-		return
+		log.Warnf("Attempt failed to create keyspace (oinker): %s", err)
+		return err
 	}
 
-	log.Info("Creating table oinker.oinks")
+	log.Info("Attempting to create table oinker.oinks")
 
 	err = r.session.Query(
 		"CREATE TABLE IF NOT EXISTS oinker.oinks " +
@@ -71,11 +83,11 @@ func (r *CQLOinkRepo) Initialize() {
 		"WITH CLUSTERING ORDER BY (created_at DESC)",
 	).Exec()
 	if err != nil {
-		log.Errorf("Creating table (oinker.oinks): %s", err)
-		return
+		log.Warnf("Attempt failed to create table (oinker.oinks): %s", err)
+		return err
 	}
 
-	log.Info("Creating table oinker.analytics")
+	log.Info("Attempting to create table oinker.analytics")
 
 	err = r.session.Query(
 		"CREATE TABLE IF NOT EXISTS oinker.analytics " +
@@ -83,11 +95,11 @@ func (r *CQLOinkRepo) Initialize() {
 		"WITH CLUSTERING ORDER BY (frequency DESC)",
 	).Exec()
 	if err != nil {
-		log.Errorf("Creating table (oinker.analytics): %s", err)
-		return
+		log.Warnf("Attempt failed to create table (oinker.analytics): %s", err)
+		return err
 	}
 
-	r.initialized = true
+	return nil
 }
 
 func (r *CQLOinkRepo) Finalize() {

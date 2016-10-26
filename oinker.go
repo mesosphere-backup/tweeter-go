@@ -15,6 +15,7 @@ import (
 type Oinker struct {
 	CQLHosts []string
 	CQLReplicationFactor int
+	CQLReconnectInterval time.Duration
 }
 
 func (o *Oinker) NewGraph() inject.Graph {
@@ -33,9 +34,7 @@ func (o *Oinker) NewGraph() inject.Graph {
 	graph.Define(&server, inject.NewProvider(http.NewServeMux))
 
 	var cqlCluster *gocql.ClusterConfig
-	graph.Define(&cqlCluster, inject.NewProvider(func() *gocql.ClusterConfig {
-		return NewCQLCluster(o.CQLHosts...)
-	}))
+	graph.Define(&cqlCluster, inject.NewProvider(service.NewCQLCluster, &o.CQLHosts, &o.CQLReconnectInterval))
 
 	var cqlSession *service.CQLSession
 	graph.Define(&cqlSession, inject.NewProvider(service.NewCQLSession, &cqlCluster))
@@ -60,24 +59,4 @@ func (o *Oinker) NewGraph() inject.Graph {
 	graph.Define(&oinkController, inject.NewProvider(controller.NewOinkController, &oinkRepo))
 
 	return graph
-}
-
-// NewCQLCluster generates a new GoSQL config for Cassandra 3, which uses Proto 3
-func NewCQLCluster(hosts ...string) *gocql.ClusterConfig {
-	cfg := &gocql.ClusterConfig{
-		Hosts:                  hosts,
-		CQLVersion:             "3.0.0",
-		ProtoVersion:           3,
-		Timeout:                600 * time.Millisecond,
-		Port:                   9042,
-		NumConns:               2,
-		Consistency:            gocql.Quorum,
-		MaxPreparedStmts:       1000,
-		MaxRoutingKeyInfo:      1000,
-		PageSize:               5000,
-		DefaultTimestamp:       true,
-		MaxWaitSchemaAgreement: 60 * time.Second,
-		ReconnectInterval:      60 * time.Second,
-	}
-	return cfg
 }

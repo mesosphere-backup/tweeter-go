@@ -3,8 +3,11 @@ package service
 import (
 	"github.com/gocql/gocql"
 	log "github.com/Sirupsen/logrus"
+	"github.com/cenkalti/backoff"
 
 	"sync"
+	"os"
+	"fmt"
 )
 
 type CQLSession struct {
@@ -28,16 +31,25 @@ func (s *CQLSession) Initialize() {
 		return
 	}
 
-	log.Info("Creating cql session")
-
-	session, err := s.cluster.CreateSession()
+	err := backoff.Retry(s.initializeAttempt, backoff.NewExponentialBackOff())
 	if err != nil {
-		log.Errorf("Creating CQL Session: %s", err)
-		return
+		log.Errorf("Initializing CQLSession: %s", err)
+		os.Exit(1)
 	}
-	s.Session = *session
 
 	s.initialized = true
+}
+
+func (s *CQLSession) initializeAttempt() error {
+	log.Info("Attempting to create CQL session")
+	session, err := s.cluster.CreateSession()
+	// inverted error check
+	if err != nil {
+		log.Warnf("Attempt failed to create CQL Session: %s", err)
+		return fmt.Errorf("Creating CQL Session: %s", err)
+	}
+	s.Session = *session
+	return nil
 }
 
 func (s *CQLSession) Finalize() {
