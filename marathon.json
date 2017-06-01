@@ -1,10 +1,10 @@
 {
-  "id": "/oinker",
+  "id": "/tweeter",
   "instances": 3,
   "container": {
     "type": "DOCKER",
     "docker": {
-      "image": "mesosphere/oinker-go:latest",
+      "image": "mesosphere/tweeter-go:latest",
       "network": "BRIDGE",
       "portMappings": [
         {
@@ -15,7 +15,7 @@
       ]
     }
   },
-  "cmd": "oinker --cassandra-addr=cassandra-dcos-node.cassandra.dcos.mesos --cassandra-repl=3",
+  "cmd": "tweeter --cassandra-addr=cassandra-dcos-node.cassandra.dcos.mesos --cassandra-repl=3",
   "healthChecks": [{
     "protocol": "TCP",
     "gracePeriodSeconds": 600,

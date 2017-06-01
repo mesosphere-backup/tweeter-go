@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-type Oink struct {
+type Tweet struct {
 	ID string
 	Content string
 	CreationTime time.Time

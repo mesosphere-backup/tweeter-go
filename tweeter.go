@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/mesosphere/oinker-go/controller"
-	"github.com/mesosphere/oinker-go/service"
+	"github.com/mesosphere/tweeter-go/controller"
+	"github.com/mesosphere/tweeter-go/service"
 
 	"github.com/karlkfi/inject"
 	"github.com/gocql/gocql"
@@ -12,18 +12,18 @@ import (
 	"time"
 )
 
-type Oinker struct {
+type Tweeter struct {
 	CQLHosts []string
 	CQLReplicationFactor int
 	CQLReconnectInterval time.Duration
 }
 
-func (o *Oinker) NewGraph() inject.Graph {
+func (o *Tweeter) NewGraph() inject.Graph {
 	graph := inject.NewGraph()
 
 	var instanceName string
 	graph.Define(&instanceName, inject.NewProvider(func() string {
-		name := os.Getenv("OINKER_INSTANCE_NAME")
+		name := os.Getenv("TWEETER_INSTANCE_NAME")
 		if name == "" {
 			return "instance-unknown"
 		}
@@ -39,24 +39,24 @@ func (o *Oinker) NewGraph() inject.Graph {
 	var cqlSession *service.CQLSession
 	graph.Define(&cqlSession, inject.NewProvider(service.NewCQLSession, &cqlCluster))
 
-	var oinkRepo service.OinkRepo
+	var tweetRepo service.TweetRepo
 	if len(o.CQLHosts) > 0 {
-		graph.Define(&oinkRepo, inject.NewProvider(service.NewCQLOinkRepo, &cqlSession, &o.CQLReplicationFactor))
+		graph.Define(&tweetRepo, inject.NewProvider(service.NewCQLTweetRepo, &cqlSession, &o.CQLReplicationFactor))
 	} else {
-		graph.Define(&oinkRepo, inject.NewProvider(service.NewMockOinkRepo))
+		graph.Define(&tweetRepo, inject.NewProvider(service.NewMockTweetRepo))
 	}
 
 	var readyController *controller.ReadyController
-	graph.Define(&readyController, inject.NewProvider(controller.NewReadyController, &oinkRepo, &instanceName))
+	graph.Define(&readyController, inject.NewProvider(controller.NewReadyController, &tweetRepo, &instanceName))
 
 	var assetsController *controller.AssetsController
 	graph.Define(&assetsController, inject.NewProvider(controller.NewAssetsController))
 
 	var indexController *controller.IndexController
-	graph.Define(&indexController, inject.NewProvider(controller.NewIndexController, &oinkRepo, &instanceName))
+	graph.Define(&indexController, inject.NewProvider(controller.NewIndexController, &tweetRepo, &instanceName))
 
-	var oinkController *controller.OinkController
-	graph.Define(&oinkController, inject.NewProvider(controller.NewOinkController, &oinkRepo))
+	var tweetController *controller.TweetController
+	graph.Define(&tweetController, inject.NewProvider(controller.NewTweetController, &tweetRepo))
 
 	return graph
 }

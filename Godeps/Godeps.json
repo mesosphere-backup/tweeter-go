@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/mesosphere/oinker-go",
+	"ImportPath": "github.com/mesosphere/tweeter-go",
 	"GoVersion": "go1.6.2",
 	"Deps": [
 		{

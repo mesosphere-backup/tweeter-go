@@ -5,26 +5,26 @@ items:
 - apiVersion: v1
   kind: ReplicationController
   metadata:
-    name: oinker-go
+    name: tweeter-go
     labels:
-      app: oinker
+      app: tweeter
   spec:
     replicas: 3
     selector:
-      app: oinker
+      app: tweeter
     template:
       metadata:
         labels:
-          app: oinker
+          app: tweeter
         annotations:
           k8s.mesosphere.io/roles: slave_public
       spec:
         containers:
         - name: server
-          image: mesosphere/oinker-go:latest
+          image: mesosphere/tweeter-go:latest
           imagePullPolicy: Always
           command:
-          - "oinker"
+          - "tweeter"
           - "--cassandra-addr=cassandra-dcos-node.cassandra.dcos.mesos"
           - "--cassandra-repl=3"
           readinessProbe:
@@ -46,19 +46,19 @@ items:
             limits:
               cpu: 0.25
           env:
-          - name: OINKER_INSTANCE_NAME
+          - name: TWEETER_INSTANCE_NAME
             valueFrom:
               fieldRef:
                 fieldPath: metadata.name
 - apiVersion: v1
   kind: Service
   metadata:
-    name: oinker
+    name: tweeter
     labels:
-      app: oinker
+      app: tweeter
   spec:
     selector:
-      app: oinker
+      app: tweeter
     ports:
     - port: 80
       targetPort: http

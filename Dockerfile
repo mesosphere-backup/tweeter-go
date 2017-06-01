@@ -1,14 +1,14 @@
 FROM alpine:3.2
 
-ENV GOBIN /oinker/bin
+ENV GOBIN /tweeter/bin
 ENV PATH  $GOBIN:$PATH
 
-WORKDIR /oinker
+WORKDIR /tweeter
 
 EXPOSE 8080
 
-ENTRYPOINT ["oinker"]
+ENTRYPOINT ["tweeter"]
 
-COPY ./_output/bin/oinker /oinker/bin/oinker
-COPY ./assets /oinker/assets
-COPY ./templates /oinker/templates
+COPY ./_output/bin/tweeter /tweeter/bin/tweeter
+COPY ./assets /tweeter/assets
+COPY ./templates /tweeter/templates

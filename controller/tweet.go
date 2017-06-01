@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"github.com/mesosphere/oinker-go/model"
-	"github.com/mesosphere/oinker-go/service"
+	"github.com/mesosphere/tweeter-go/model"
+	"github.com/mesosphere/tweeter-go/service"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -12,25 +12,25 @@ import (
 	"strings"
 )
 
-type OinkController struct {
-	repo service.OinkRepo
+type TweetController struct {
+	repo service.TweetRepo
 }
 
-func NewOinkController(repo service.OinkRepo) *OinkController {
-	return &OinkController{
+func NewTweetController(repo service.TweetRepo) *TweetController {
+	return &TweetController{
 		repo: repo,
 	}
 }
 
-func (c *OinkController) Name() string {
-	return "OinkController"
+func (c *TweetController) Name() string {
+	return "TweetController"
 }
 
-func (c *OinkController) RegisterHandlers(server MuxServer) {
-	server.HandleFunc("/oink", c.Handle)
+func (c *TweetController) RegisterHandlers(server MuxServer) {
+	server.HandleFunc("/tweet", c.Handle)
 }
 
-func (c *OinkController) Handle(w http.ResponseWriter, r *http.Request) {
+func (c *TweetController) Handle(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -49,16 +49,16 @@ func (c *OinkController) Handle(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *OinkController) Get(w http.ResponseWriter, r *http.Request) {
-	subPath := strings.Replace(r.URL.Path, "/oink/", "", 1)
+func (c *TweetController) Get(w http.ResponseWriter, r *http.Request) {
+	subPath := strings.Replace(r.URL.Path, "/tweet/", "", 1)
 	if subPath == "" {
-		oinks, err := c.repo.All()
+		tweets, err := c.repo.All()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		bytes, err := json.Marshal(oinks)
+		bytes, err := json.Marshal(tweets)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -78,7 +78,7 @@ func (c *OinkController) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := segments[0]
-	oink, found, err := c.repo.FindByID(id)
+	tweet, found, err := c.repo.FindByID(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -91,7 +91,7 @@ func (c *OinkController) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bytes, err := json.Marshal(oink)
+	bytes, err := json.Marshal(tweet)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -100,11 +100,11 @@ func (c *OinkController) Get(w http.ResponseWriter, r *http.Request) {
 	w.Write(bytes)
 }
 
-func (c *OinkController) Post(w http.ResponseWriter, r *http.Request) {
+func (c *TweetController) Post(w http.ResponseWriter, r *http.Request) {
 	handle := r.Form.Get("handle")
 	content := r.Form.Get("content")
 
-	oink, err := c.repo.Create(model.Oink{
+	tweet, err := c.repo.Create(model.Tweet{
 		Handle: handle,
 		Content: content,
 	})
@@ -112,7 +112,7 @@ func (c *OinkController) Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return //TODO: redirect to index with error popup?
 	}
-	log.Debugf("Added Oink: %+v\n", oink)
+	log.Debugf("Added Tweet: %+v\n", tweet)
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 }

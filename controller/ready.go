@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/mesosphere/oinker-go/service"
+	"github.com/mesosphere/tweeter-go/service"
 
 	log "github.com/Sirupsen/logrus"
 

@@ -15,7 +15,7 @@ godep:
 
 .PHONY: binary
 binary:
-	godep go build -v -o _output/bin/oinker $(REPO_PATH)
+	godep go build -v -o _output/bin/tweeter $(REPO_PATH)
 
 .PHONY: binary-alpine
 binary-alpine:

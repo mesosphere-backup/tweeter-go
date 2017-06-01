@@ -1,10 +1,10 @@
 package service
 
-import "github.com/mesosphere/oinker-go/model"
+import "github.com/mesosphere/tweeter-go/model"
 
-type OinkRepo interface {
+type TweetRepo interface {
 	Service
-	Create(model.Oink) (model.Oink, error)
-	FindByID(id string) (model.Oink, bool, error)
-	All() ([]model.Oink, error)
+	Create(model.Tweet) (model.Tweet, error)
+	FindByID(id string) (model.Tweet, bool, error)
+	All() ([]model.Tweet, error)
 }

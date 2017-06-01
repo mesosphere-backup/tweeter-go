@@ -18,7 +18,7 @@ func (c *flags) addSet(s *flag.FlagSet) {
 	cassandraAddr := s.String("cassandra-addr", "", "Address to a single Cassandra node")
 	c.cassandraAddr = cassandraAddr
 
-	cassandraRepl := s.Int("cassandra-repl", 1, "Replication factor to use for the oinker keyspace in Cassandra")
+	cassandraRepl := s.Int("cassandra-repl", 1, "Replication factor to use for the tweeter keyspace in Cassandra")
 	c.cassandraRepl = cassandraRepl
 
 	address := s.String("address", "0.0.0.0:8080", "host:port on which to listen")

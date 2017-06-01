@@ -1,4 +1,4 @@
-# Oinker-Go
+# Tweeter-Go
 
 Example Go (golang) web app with dependency injection and graceful shutdown. Acts like a mini Twitter clone.
 
@@ -34,7 +34,7 @@ make image
 
 ## Operation
 
-There are several ways to launch the Oinker server.
+There are several ways to launch the Tweeter server.
 
 ### Source
 
@@ -51,20 +51,20 @@ go run main.go
 Run in Docker:
 
 ```
-docker run -d --name oinker -p 0.0.0.0:8080:8080 mesosphere/oinker-go:latest
+docker run -d --name tweeter -p 0.0.0.0:8080:8080 mesosphere/tweeter-go:latest
 ```
 
 With Cassandra:
 
 ```
 docker run -d --name cassandra cassandra:2.2.3
-docker run -d --name oinker --link cassandra:cassandra -p 0.0.0.0:8080:8080 mesosphere/oinker-go:latest --cassandra-addr=cassandra
+docker run -d --name tweeter --link cassandra:cassandra -p 0.0.0.0:8080:8080 mesosphere/tweeter-go:latest --cassandra-addr=cassandra
 ```
 
-Find Oinker IP:
+Find Tweeter IP:
 
 ```
-docker inspect --format "{{.NetworkSettings.IPAddress}}" oinker
+docker inspect --format "{{.NetworkSettings.IPAddress}}" tweeter
 ```
 
 ### Marathon
@@ -83,16 +83,16 @@ Run in [Kubernetes](http://kubernetes.io/):
 kubectl create -f kubernetes.yaml
 ```
 
-By default, `kubernetes.yaml` assumes you have 3 public slave nodes and want 1 Oinker instance on each. With this configuration, Oinker can be reached on the default HTTP port (80) through the public slave DNS URL. On AWS, the DNS should automatically handle round-robin for requests to Oinker. Load Balancing could also be configured, using AWS Elastic Load Balancing.
+By default, `kubernetes.yaml` assumes you have 3 public slave nodes and want 1 Tweeter instance on each. With this configuration, Tweeter can be reached on the default HTTP port (80) through the public slave DNS URL. On AWS, the DNS should automatically handle round-robin for requests to Tweeter. Load Balancing could also be configured, using AWS Elastic Load Balancing.
 
 
 ## Usage
 
 Visit the home page at http://localhost:8080/
 
-Enter handle &amp; message &amp; hit Oink.
+Enter handle &amp; message &amp; hit Tweet.
 
-See past oinks on the right-hand side of the home page.
+See past tweets on the right-hand side of the home page.
 
 
 ## Future

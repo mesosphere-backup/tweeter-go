@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"github.com/mesosphere/oinker-go/service"
-	"github.com/mesosphere/oinker-go/view"
+	"github.com/mesosphere/tweeter-go/service"
+	"github.com/mesosphere/tweeter-go/view"
 
 	"github.com/dustin/go-humanize"
 	log "github.com/Sirupsen/logrus"
@@ -14,11 +14,11 @@ import (
 )
 
 type IndexController struct {
-	repo service.OinkRepo
+	repo service.TweetRepo
 	instanceName string
 }
 
-func NewIndexController(repo service.OinkRepo, instanceName string) *IndexController {
+func NewIndexController(repo service.TweetRepo, instanceName string) *IndexController {
 	return &IndexController{
 		repo: repo,
 		instanceName: instanceName,
@@ -52,19 +52,19 @@ func (c *IndexController) handleInner(w http.ResponseWriter, r *http.Request) HT
 		"templates/index.html.tmpl",
 	))
 
-	oinks, err := c.repo.All()
+	tweets, err := c.repo.All()
 	if err != nil {
-		return NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Retrieving all oinks: %s", err))
+		return NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Retrieving all tweets: %s", err))
 	}
-	log.Debugf("Oinks: %+v\n", oinks)
+	log.Debugf("Tweets: %+v\n", tweets)
 
 	err = t.Execute(w, view.Index{
 		Page: view.Page{
 			RelativeRootPath: ".",
 			InstanceName: c.instanceName,
 		},
-		Oinks: oinks,
-		IsEmpty: len(oinks) == 0,
+		Tweets: tweets,
+		IsEmpty: len(tweets) == 0,
 	})
 	if err != nil {
 		return NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Rendering templates: %s", err))

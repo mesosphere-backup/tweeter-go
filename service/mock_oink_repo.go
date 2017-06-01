@@ -1,58 +1,58 @@
 package service
 
 import (
-	"github.com/mesosphere/oinker-go/model"
+	"github.com/mesosphere/tweeter-go/model"
 
 	"sync"
 	"strconv"
 	"time"
 )
 
-// MockOinkRepo is an in-memory OinkRepo
-type MockOinkRepo struct {
+// MockTweetRepo is an in-memory TweetRepo
+type MockTweetRepo struct {
 	lock sync.RWMutex
-	oinks []model.Oink
+	tweets []model.Tweet
 }
 
-func NewMockOinkRepo() *MockOinkRepo {
-	return &MockOinkRepo{
-		oinks: []model.Oink{},
+func NewMockTweetRepo() *MockTweetRepo {
+	return &MockTweetRepo{
+		tweets: []model.Tweet{},
 	}
 }
 
-func (r *MockOinkRepo) CheckReady() error {
+func (r *MockTweetRepo) CheckReady() error {
 	// in-memory repo is always ready
 	return nil
 }
 
-func (r *MockOinkRepo) Create(o model.Oink) (model.Oink, error) {
+func (r *MockTweetRepo) Create(o model.Tweet) (model.Tweet, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	o.ID = strconv.Itoa(len(r.oinks))
+	o.ID = strconv.Itoa(len(r.tweets))
 	o.CreationTime = time.Now()
-	r.oinks = append(r.oinks, o)
+	r.tweets = append(r.tweets, o)
 	return o, nil
 }
 
-func (r *MockOinkRepo) FindByID(id string) (model.Oink, bool, error) {
+func (r *MockTweetRepo) FindByID(id string) (model.Tweet, bool, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
-	for _, oink := range r.oinks {
-		if oink.ID == id {
-			return oink, true, nil
+	for _, tweet := range r.tweets {
+		if tweet.ID == id {
+			return tweet, true, nil
 		}
 	}
-	return model.Oink{}, false, nil
+	return model.Tweet{}, false, nil
 }
 
-// Returns all oinks, from newest to oldest
-func (r *MockOinkRepo) All() ([]model.Oink, error) {
+// Returns all tweets, from newest to oldest
+func (r *MockTweetRepo) All() ([]model.Tweet, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	result := make([]model.Oink, 0, len(r.oinks))
-	for i := len(r.oinks)-1; i >= 0; i-- {
-		result = append(result, r.oinks[i])
+	result := make([]model.Tweet, 0, len(r.tweets))
+	for i := len(r.tweets)-1; i >= 0; i-- {
+		result = append(result, r.tweets[i])
 	}
 	return result, nil
 }

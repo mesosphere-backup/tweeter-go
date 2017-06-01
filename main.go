@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/mesosphere/oinker-go/controller"
-	"github.com/mesosphere/oinker-go/service"
+	"github.com/mesosphere/tweeter-go/controller"
+	"github.com/mesosphere/tweeter-go/service"
 
 	"github.com/facebookgo/grace/gracehttp"
 	"github.com/karlkfi/inject"
@@ -17,20 +17,20 @@ func main() {
 	flags := parseFlags(flagSet)
 	log.Infof("Flags: %+v", flags)
 
-	oinker := &Oinker{}
+	tweeter := &Tweeter{}
 
 	if *flags.cassandraAddr != "" {
-		oinker.CQLHosts = []string{*flags.cassandraAddr}
-		oinker.CQLReplicationFactor = *flags.cassandraRepl
+		tweeter.CQLHosts = []string{*flags.cassandraAddr}
+		tweeter.CQLReplicationFactor = *flags.cassandraRepl
 	}
 
-	graph := oinker.NewGraph()
+	graph := tweeter.NewGraph()
 	defer graph.Finalize()
 
 	// initialize cassandra (connection, keyspace, tables)
-	var oinkRepo service.OinkRepo
-	inject.ExtractAssignable(graph, &oinkRepo)
-	svc, ok := oinkRepo.(inject.Initializable)
+	var tweetRepo service.TweetRepo
+	inject.ExtractAssignable(graph, &tweetRepo)
+	svc, ok := tweetRepo.(inject.Initializable)
 	if ok {
 		svc.Initialize()
 	}
