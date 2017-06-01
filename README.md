@@ -1,4 +1,4 @@
-# Tweeter-Go
+![Tweeter-Go](https://github.com/mesosphere/tweeter-go/raw/master/assets/images/tweeter-logo-banner.png)
 
 Example Go (golang) web app with dependency injection and graceful shutdown. Acts like a mini Twitter clone.
 
