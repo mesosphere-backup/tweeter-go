@@ -95,15 +95,9 @@ Enter handle &amp; message &amp; hit Tweet.
 See past tweets on the right-hand side of the home page.
 
 
-## Future
-
-- DNS SRV record Cassandra discovery
-- Analytics page
-
-
 ## License
 
-   Copyright 2015 Karl Isenberg
+   Copyright 2015-2017 Mesosphere, Inc.
 
    Licensed under the [Apache License Version 2.0](LICENSE) (the "License");
    you may not use this project except in compliance with the License.
