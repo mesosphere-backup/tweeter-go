@@ -1,0 +1,15 @@
+{
+  "id": "janitor-cassandra",
+  "cmd": "/janitor.py -r cassandra-role -p cassandra-principal -z dcos-service-cassandra",
+  "cpus": 1,
+  "mem": 128,
+  "disk": 1,
+  "instances": 1,
+  "container": {
+    "type": "DOCKER",
+    "docker": {
+      "image": "mesosphere/janitor:latest",
+      "network": "HOST"
+    }
+  }
+}
